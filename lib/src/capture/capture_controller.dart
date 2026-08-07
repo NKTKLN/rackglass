@@ -114,6 +114,9 @@ class CaptureController extends ChangeNotifier {
   DateTime? _startedAt;
   DateTime? _lastSignalCheck;
 
+  /// When the picture first went black, or null while there is a picture.
+  DateTime? _blackSince;
+
   CaptureState get state => _state;
   String? get error => _error;
   ui.Image? get frame => _frame;
@@ -229,6 +232,8 @@ class CaptureController extends ChangeNotifier {
     _decodeErrors = 0;
     _bytesTotal = 0;
     _frameTimes.clear();
+    _blackSince = null;
+    _lastSignalCheck = null;
     _startedAt = DateTime.now();
 
     final args = <String>[
@@ -398,13 +403,8 @@ class CaptureController extends ChangeNotifier {
   /// is indistinguishable from a bug unless the app says so.
   Future<void> _maybeCheckSignal() async {
     final now = DateTime.now();
-    // Signal coming back should be noticed quickly; signal being lost can take
-    // its time, since a genuinely black scene should not flicker the badge.
-    final interval = _state == CaptureState.noSignal
-        ? AppConfig.captureSignalRecheck
-        : AppConfig.captureSignalCheck;
     if (_lastSignalCheck != null &&
-        now.difference(_lastSignalCheck!) < interval) {
+        now.difference(_lastSignalCheck!) < AppConfig.captureSignalCheck) {
       return;
     }
     _lastSignalCheck = now;
@@ -431,9 +431,25 @@ class CaptureController extends ChangeNotifier {
         sum += d[i] + d[i + 1] + d[i + 2];
       }
       final mean = sum / (d.length / 4 * 3);
-      final blank = mean < AppConfig.captureBlackLevel;
-      final next = blank ? CaptureState.noSignal : CaptureState.streaming;
-      if (_state != next && _state != CaptureState.idle) _setState(next);
+      if (_state == CaptureState.idle) return;
+
+      if (mean >= AppConfig.captureBlackLevel) {
+        // Any picture at all clears it immediately: a source coming back
+        // should not make you wait.
+        _blackSince = null;
+        if (_state == CaptureState.noSignal) {
+          _setState(CaptureState.streaming);
+        }
+        return;
+      }
+      // Black. Start the clock, and only call it a lost signal once the
+      // picture has stayed black for the whole hold — the last good frame
+      // keeps showing in the meantime.
+      _blackSince ??= now;
+      if (_state != CaptureState.noSignal &&
+          now.difference(_blackSince!) >= AppConfig.captureBlackHold) {
+        _setState(CaptureState.noSignal);
+      }
     } catch (_) {
       // Sampling is diagnostics; never let it take the stream down.
     }

@@ -45,11 +45,12 @@ class AppConfig {
   static const captureBufferLimit = 8 << 20;
 
   /// How often the frame is sampled to tell a black picture from a live one.
-  static const captureSignalCheck = Duration(milliseconds: 1500);
+  static const captureSignalCheck = Duration(milliseconds: 300);
 
-  /// Faster cadence while the picture is believed black, so a source coming
-  /// back is noticed in well under a second.
-  static const captureSignalRecheck = Duration(milliseconds: 400);
+  /// The picture has to stay black this long before the app says so. A fade to
+  /// black, a mode change or one dark frame is not a lost signal, and a banner
+  /// that blinks on every dark scene is worse than no banner.
+  static const captureBlackHold = Duration(seconds: 1);
 
   /// Mean channel value below which a frame counts as no signal. The stick on
   /// this desk reports a luma average of 7 with nothing on its input.

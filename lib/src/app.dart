@@ -162,7 +162,6 @@ class _PromTermAppState extends State<PromTermApp> {
       builder: (context, _) => Column(
         children: [
           _TopBar(
-            store: _store,
             mode: _mode,
             onPick: (m) => setState(() {
               _mode = m;
@@ -210,45 +209,16 @@ abstract final class Chrome {
   static const status = 26.0;
 }
 
-/// Mode buttons, link state and the clock on one line. There is no separate
-/// title bar: the app name and the endpoint told you nothing you could act on,
-/// and the row they cost is worth more to the data.
-class _TopBar extends StatefulWidget {
-  const _TopBar({
-    required this.store,
-    required this.mode,
-    required this.onPick,
-  });
+/// Mode buttons, and nothing else. Link state and the clock live in the
+/// status line at the bottom, where the rest of the diagnostics already are.
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.mode, required this.onPick});
 
-  final MetricsStore store;
   final AppMode mode;
   final ValueChanged<AppMode> onPick;
 
   @override
-  State<_TopBar> createState() => _TopBarState();
-}
-
-class _TopBarState extends State<_TopBar> {
-  Timer? _clock;
-
-  @override
-  void initState() {
-    super.initState();
-    _clock = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => setState(() {}),
-    );
-  }
-
-  @override
-  void dispose() {
-    _clock?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final ok = widget.store.healthy;
     return Container(
       height: Chrome.top,
       // Bottom padding keeps the buttons clear of the divider rule; without it
@@ -260,27 +230,7 @@ class _TopBarState extends State<_TopBar> {
       child: Row(
         children: [
           for (final m in AppMode.values)
-            _Tab(
-              mode: m,
-              selected: m == widget.mode,
-              onTap: () => widget.onPick(m),
-            ),
-          const Spacer(),
-          Text(
-            ok ? '● ONLINE' : '● ${(widget.store.error ?? "OFFLINE").toUpperCase()}',
-            style: ts(
-              color: ok ? TC.green : TC.red,
-              weight: FontWeight.w700,
-            ),
-            maxLines: 1,
-            softWrap: false,
-          ),
-          const SizedBox(width: 14),
-          // Time only: the date never changes while you are looking at it.
-          Text(
-            fmtClock(DateTime.now()),
-            style: ts(size: TZ.title, color: TC.bright),
-          ),
+            _Tab(mode: m, selected: m == mode, onTap: () => onPick(m)),
         ],
       ),
     );
@@ -333,15 +283,39 @@ class _Tab extends StatelessWidget {
   }
 }
 
-class _StatusBar extends StatelessWidget {
+/// Link state, wall clock and the key map. Ticks once a second on its own, so
+/// the clock keeps moving between scrapes.
+class _StatusBar extends StatefulWidget {
   const _StatusBar({required this.store});
 
   final MetricsStore store;
 
   @override
+  State<_StatusBar> createState() => _StatusBarState();
+}
+
+class _StatusBarState extends State<_StatusBar> {
+  Timer? _clock;
+
+  @override
+  void initState() {
+    super.initState();
+    _clock = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => setState(() {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final snap = store.snapshot;
-    final err = store.error;
+    final s = widget.store;
+    final ok = s.healthy;
     return Container(
       height: Chrome.status,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -351,30 +325,27 @@ class _StatusBar extends StatelessWidget {
       child: Row(
         children: [
           const BlinkCursor(size: TZ.small),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
+          Text(
+            ok ? '[ online ]' : '[ offline ]',
+            style: ts(
+              size: TZ.small,
+              color: ok ? TC.green : TC.red,
+              weight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(fmtClock(DateTime.now()), style: ts(size: TZ.small)),
+          const SizedBox(width: 12),
+          // A failure still has to say what it was; hiding it behind the tag
+          // would leave a red word and no reason.
           Expanded(
-            child: err != null
-                ? Text(
-                    'SCRAPE FAILED ($err) · ${store.consecutiveErrors} in a row'
-                    '${store.lastSuccess != null ? " · last ok ${fmtClock(store.lastSuccess!)}" : ""}',
-                    style: ts(size: TZ.caption, color: TC.red),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : snap != null
-                ? Text(
-                    '${store.endpoint.replaceFirst(RegExp(r"^https?://"), "")} · '
-                    '${snap.nodes.length} node targets · ${snap.targetsDown} down · '
-                    '${snap.gpus.length} gpu · poll ${snap.fetchMillis}ms · '
-                    'updated ${fmtClock(snap.at)}',
-                    style: ts(size: TZ.caption, color: TC.mid),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : Text(
-                    'waiting for first scrape…',
-                    style: ts(size: TZ.caption, color: TC.dim),
-                  ),
+            child: Text(
+              ok ? '' : (s.error ?? 'scrape failed'),
+              style: ts(size: TZ.caption, color: TC.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           const SizedBox(width: 10),
           Text(

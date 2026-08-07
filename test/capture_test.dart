@@ -52,13 +52,33 @@ void main() {
     expect(fake.controller.state, CaptureState.streaming);
   });
 
-  test('a black picture is reported as no signal, not as a live stream', () async {
+  /// Keeps frames flowing for [ms], the way a real 30 fps stream would.
+  Future<void> feed(FakeCapture fake, List<int> frame, int ms) async {
+    final deadline = DateTime.now().add(Duration(milliseconds: ms));
+    while (DateTime.now().isBefore(deadline)) {
+      fake.latest.emit(stream(frame, 2));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  test('a brief dark patch does not raise the no-signal banner', () async {
     final fake = FakeCapture();
     addTearDown(fake.controller.dispose);
     await fake.controller.start();
 
-    fake.latest.emit(stream(darkFrame(), 4));
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    await feed(fake, litFrame(), 400);
+    // A fade to black, a mode change, one dark scene — shorter than the hold.
+    await feed(fake, darkFrame(), 500);
+
+    expect(fake.controller.state, CaptureState.streaming);
+  });
+
+  test('a black picture is reported as no signal once it persists', () async {
+    final fake = FakeCapture();
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+
+    await feed(fake, darkFrame(), 1600);
 
     // Frames are arriving and decoding fine — the picture is simply black,
     // which is what an unplugged HDMI input looks like.
@@ -67,22 +87,16 @@ void main() {
     expect(fake.controller.state, CaptureState.noSignal);
   });
 
-  test('a live picture clears the no-signal state again', () async {
+  test('a returning picture clears the banner without waiting', () async {
     final fake = FakeCapture();
     addTearDown(fake.controller.dispose);
     await fake.controller.start();
 
-    fake.latest.emit(stream(darkFrame(), 4));
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    await feed(fake, darkFrame(), 1600);
     expect(fake.controller.state, CaptureState.noSignal);
 
-    // The sampler is rate limited and only runs off a decoded frame, so the
-    // first batch after the change may land inside the cooldown. A second
-    // batch a beat later is what a real 30 fps stream would deliver anyway.
-    fake.latest.emit(stream(litFrame(), 4));
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    fake.latest.emit(stream(litFrame(), 4));
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // No hold on the way back: the source returning is good news.
+    await feed(fake, litFrame(), 400);
     expect(fake.controller.state, CaptureState.streaming);
   });
 

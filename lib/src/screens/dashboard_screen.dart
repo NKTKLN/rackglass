@@ -427,7 +427,7 @@ abstract final class _Col {
   static const cpuPct = 62.0; // '10.6%'
   static const cpuBar = 104.0;
   static const memText = 128.0; // '14.7G/31.3G'
-  static const memPct = 50.0; // '47%'
+  static const memPct = 58.0; // '47%', and the 'MEMORY' header above it
   static const memBar = 104.0;
   static const root = 128.0; // '13.3G/61.0G'
   static const uptime = 72.0; // '2d 2h'
@@ -466,7 +466,14 @@ class _NodeTable extends StatelessWidget {
             child: Column(
               children: [
                 for (final n in guests)
-                  Expanded(child: _NodeRow(node: n, store: store)),
+                  Expanded(
+                    child: _NodeRow(
+                      node: n,
+                      store: store,
+                      // The rule under the last row separates it from nothing.
+                      lastRow: n == guests.last,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -518,10 +525,15 @@ class _TableHeader extends StatelessWidget {
 }
 
 class _NodeRow extends StatelessWidget {
-  const _NodeRow({required this.node, required this.store});
+  const _NodeRow({
+    required this.node,
+    required this.store,
+    this.lastRow = false,
+  });
 
   final NodeStat node;
   final MetricsStore store;
+  final bool lastRow;
 
   @override
   Widget build(BuildContext context) {
@@ -534,8 +546,12 @@ class _NodeRow extends StatelessWidget {
         SizedBox(width: width, child: Align(alignment: align, child: child));
 
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: TC.gridLine)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: lastRow ? const Color(0x00000000) : TC.gridLine,
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,

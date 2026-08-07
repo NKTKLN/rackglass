@@ -186,6 +186,51 @@ void main() {
   testWidgets('NODES has no overlapping text', (t) => check(t, 'NODES'));
   testWidgets('CAPTURE has no overlapping text', (t) => check(t, 'CAPTURE'));
 
+  /// Any single-line label that does not fit its box is a bug: `MEMORY` came
+  /// out as `MEMOR` this way, and clipping leaves no ellipsis to notice.
+  testWidgets('no label is cut off by its column', (tester) async {
+    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final store = MetricsStore(
+      client: PromClient(
+        baseUrl: 'http://fake:9090',
+        client: FakePrometheus().client(),
+      ),
+    );
+    addTearDown(store.dispose);
+    final capture = FakeCapture().controller;
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    addTearDown(capture.dispose);
+
+    await tester.pumpWidget(
+      PromTermApp(store: store, capture: capture, showBootSplash: false),
+    );
+    await store.refresh();
+    await tester.pump();
+
+    final cut = <String>[];
+    for (final el in find.byType(Text).evaluate()) {
+      final widget = el.widget as Text;
+      // Only labels that promised to fit: an ellipsis is a deliberate choice
+      // and says so on screen.
+      if (widget.overflow == TextOverflow.ellipsis) continue;
+      final label = widget.data ?? '';
+      if (label.trim().isEmpty) continue;
+      final render = el.renderObject as RenderParagraph;
+      if (!render.hasSize) continue;
+      final wants = render.getMaxIntrinsicWidth(double.infinity);
+      if (wants > render.size.width + 0.5) {
+        cut.add(
+          '"$label" wants ${wants.toStringAsFixed(1)}px '
+          'in ${render.size.width.toStringAsFixed(1)}px',
+        );
+      }
+    }
+    expect(cut, isEmpty, reason: 'DASH clips a label:\n${cut.join("\n")}');
+  });
+
   testWidgets('DASH never clips a bar or sparkline', (t) => checkGauges(t, 'DASH'));
   testWidgets('NODES never clips a bar or sparkline', (t) => checkGauges(t, 'NODES'));
 }
