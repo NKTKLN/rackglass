@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -91,6 +92,68 @@ void main() {
     );
   }
 
+  /// Bars and sparklines put the newest sample at the right-hand end, so a cell
+  /// that does not fit is not cosmetic — it drops the most recent reading and
+  /// leaves an older one looking current. They carry no ellipsis to reveal it.
+  Future<void> checkGauges(WidgetTester tester, String mode) async {
+    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final store = MetricsStore(
+      client: PromClient(
+        baseUrl: 'http://fake:9090',
+        client: FakePrometheus(gpuUp: true).client(),
+      ),
+    );
+    addTearDown(store.dispose);
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+    await tester.pumpWidget(PromTermApp(store: store, showBootSplash: false));
+    // Several polls so the history rings hold a real shape, not the dotted
+    // placeholder that fits anything.
+    for (var i = 0; i < 6; i++) {
+      await store.refresh();
+      await tester.pump();
+    }
+    if (mode != 'DASH') {
+      await tester.tap(find.text(mode));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    final gaugeGlyphs = RegExp(r'^[█▉▊▋▌▍▎▏░·▁▂▃▄▅▆▇ ]+$');
+    final clipped = <String>[];
+    var inspected = 0;
+    for (final el in find.byType(Text).evaluate()) {
+      final widget = el.widget as Text;
+      final label = widget.data ?? widget.textSpan?.toPlainText() ?? '';
+      if (label.isEmpty || !gaugeGlyphs.hasMatch(label)) continue;
+      final render = el.renderObject as RenderParagraph;
+      if (!render.hasSize) continue;
+      inspected++;
+      final wants = render.getMaxIntrinsicWidth(double.infinity);
+      if (wants > render.size.width + 0.5) {
+        clipped.add(
+          '"$label" wants ${wants.toStringAsFixed(1)}px '
+          'in ${render.size.width.toStringAsFixed(1)}px',
+        );
+      }
+    }
+    // Without this the check passes by finding nothing — a glyph added to the
+    // bar alphabet, or a mode that stopped drawing gauges, would go unnoticed.
+    expect(
+      inspected,
+      greaterThan(4),
+      reason: '$mode: the gauge sweep matched almost nothing, so it proves '
+          'nothing — check the glyph set',
+    );
+    expect(
+      clipped,
+      isEmpty,
+      reason: '$mode clips a gauge:\n${clipped.join("\n")}',
+    );
+  }
+
   testWidgets('DASH has no overlapping text', (t) => check(t, 'DASH'));
   testWidgets(
     'DASH with a live GPU has no overlapping text',
@@ -99,4 +162,7 @@ void main() {
   testWidgets('GRAPHS has no overlapping text', (t) => check(t, 'GRAPHS'));
   testWidgets('NODES has no overlapping text', (t) => check(t, 'NODES'));
   testWidgets('CAPTURE has no overlapping text', (t) => check(t, 'CAPTURE'));
+
+  testWidgets('DASH never clips a bar or sparkline', (t) => checkGauges(t, 'DASH'));
+  testWidgets('NODES never clips a bar or sparkline', (t) => checkGauges(t, 'NODES'));
 }

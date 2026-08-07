@@ -3,49 +3,76 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 import '../util.dart';
 
+/// Number of monospace cells that fit in [maxWidth] at [size], capped by
+/// [want] when the caller asked for a specific length.
+///
+/// Gauges must never be clipped: the newest sample sits at the right-hand end,
+/// so a cell that does not fit is not cosmetic loss — it silently drops the
+/// most recent reading and leaves an older one looking current.
+int _cellsFor(double maxWidth, double size, int? want) {
+  final probe = TextPainter(
+    text: TextSpan(text: '█', style: ts(size: size)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final advance = probe.width;
+  if (advance <= 0 || !maxWidth.isFinite) return want ?? 1;
+  final fits = (maxWidth / advance).floor();
+  final n = want == null ? fits : (fits < want ? fits : want);
+  return n < 1 ? 1 : n;
+}
+
 /// `████████▌░░░░░░` bar rendered as text, so it stays on the monospace grid.
+///
+/// Sizes itself to the space it is given; [width] caps that rather than forcing
+/// it, so a bar can never render wider than its box.
 class BarGauge extends StatelessWidget {
   const BarGauge({
     super.key,
     required this.pct,
-    this.width = 16,
+    this.width,
     this.size = TZ.body,
     this.color,
   });
 
   final double? pct;
-  final int width;
+  final int? width;
   final double size;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final c = color ?? TC.forPct(pct);
-    final text = barText(pct, width);
-    // barText always emits fill first, then track, so one split colors both.
-    final cut = text.indexOf(RegExp(r'[░·]'));
-    final fill = cut < 0 ? text : text.substring(0, cut);
-    final track = cut < 0 ? '' : text.substring(cut);
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(text: fill, style: ts(size: size, color: c)),
-          TextSpan(text: track, style: ts(size: size, color: TC.barTrack)),
-        ],
-      ),
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.clip,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final text = barText(pct, _cellsFor(constraints.maxWidth, size, width));
+        // barText always emits fill first, then track, so one split colors both.
+        final cut = text.indexOf(RegExp(r'[░·]'));
+        final fill = cut < 0 ? text : text.substring(0, cut);
+        final track = cut < 0 ? '' : text.substring(cut);
+        return Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: fill, style: ts(size: size, color: c)),
+              TextSpan(text: track, style: ts(size: size, color: TC.barTrack)),
+            ],
+          ),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.clip,
+        );
+      },
     );
   }
 }
 
-/// Inline `▁▂▃▅▇` history strip.
+/// Inline `▁▂▃▅▇` history strip, newest sample on the right.
+///
+/// Like [BarGauge] it fits itself to the available width; [width] is a cap.
 class SparkText extends StatelessWidget {
   const SparkText({
     super.key,
     required this.values,
-    this.width = 14,
+    this.width,
     this.size = TZ.body,
     this.color = TC.dim,
     this.min,
@@ -53,7 +80,7 @@ class SparkText extends StatelessWidget {
   });
 
   final List<double> values;
-  final int width;
+  final int? width;
   final double size;
   final Color color;
   final double? min;
@@ -61,12 +88,19 @@ class SparkText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      sparkText(values, width, min: min, max: max),
-      style: ts(size: size, color: color, height: 1.0),
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.clip,
+    return LayoutBuilder(
+      builder: (context, constraints) => Text(
+        sparkText(
+          values,
+          _cellsFor(constraints.maxWidth, size, width),
+          min: min,
+          max: max,
+        ),
+        style: ts(size: size, color: color, height: 1.0),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.clip,
+      ),
     );
   }
 }
