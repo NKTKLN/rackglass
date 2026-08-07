@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:promterm/src/app.dart';
 import 'package:promterm/src/prom/prom_client.dart';
 import 'package:promterm/src/state/metrics_store.dart';
+import 'package:promterm/src/widgets/term_panel.dart';
 
 import 'fake_capture.dart';
 import 'fake_prometheus.dart';
@@ -151,6 +152,23 @@ void main() {
         reason: '$id header and column are different widths',
       );
     }
+  });
+
+  testWidgets('the last column keeps clear of the panel frame', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    // A right-flushed number carries no padding of its own, so without a
+    // trailing margin it reads as jammed against the border.
+    final cell = find.byKey(const ValueKey('cell-uptime-vm-node-1'));
+    final panel = find.ancestor(of: cell, matching: find.byType(TermPanel));
+    expect(panel, findsOneWidget);
+    expect(
+      tester.getRect(panel).right - tester.getRect(cell).right,
+      greaterThanOrEqualTo(16.0),
+      reason: 'uptime is crowding the panel edge',
+    );
   });
 
   testWidgets('nothing in a row overlaps anything else', (tester) async {

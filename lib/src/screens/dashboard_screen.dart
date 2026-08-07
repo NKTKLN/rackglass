@@ -40,7 +40,7 @@ class DashboardScreen extends StatelessWidget {
             children: [
               SizedBox(width: 322, child: _CpuPanel(snap: snap, store: store)),
               const SizedBox(width: 6),
-              SizedBox(width: 344, child: _GpuPanel(snap: snap)),
+              SizedBox(width: 344, child: _GpuPanel(snap: snap, store: store)),
               const SizedBox(width: 6),
               Expanded(child: _MemoryPanel(snap: snap)),
             ],
@@ -186,9 +186,10 @@ class _CpuPanel extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _GpuPanel extends StatelessWidget {
-  const _GpuPanel({required this.snap});
+  const _GpuPanel({required this.snap, required this.store});
 
   final Snapshot snap;
+  final MetricsStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -296,6 +297,34 @@ class _GpuPanel extends StatelessWidget {
               style: ts(size: TZ.caption, color: TC.red),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+            )
+          else
+            // Same pair as the CPU panel. Stale readings are never recorded,
+            // so there is nothing to draw here while the exporter is down.
+            Row(
+              children: [
+                Text('TEMP', style: ts(size: TZ.caption, color: TC.dim)),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: SparkText(
+                    values: store.gpuTempHistory,
+                    size: TZ.body,
+                    color: tempColor,
+                    min: TZ.tempFloor,
+                    max: TZ.tempCeiling,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('UTIL', style: ts(size: TZ.caption, color: TC.dim)),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: SparkText.percent(
+                    values: store.gpuUtilHistory,
+                    size: TZ.body,
+                    color: TC.mid,
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -395,13 +424,11 @@ class _MemoryPanel extends StatelessWidget {
             label: 'VM ALLOCATED (${snap.vms.length})',
             value:
                 '${fmtBytes(snap.vmMemAllocated)} · ${fmtPct(allocPct, digits: 0)}',
-            valueColor: TC.cyan,
             size: TZ.body,
           ),
           StatLine(
             label: 'VM IN USE',
             value: fmtBytes(snap.vmMemUsed),
-            valueColor: TC.cyan,
             size: TZ.body,
           ),
         ],
@@ -481,9 +508,14 @@ abstract final class _Table {
   /// the bar ends in a dark track and the two would otherwise touch.
   static const barPad = 16.0;
 
-  /// Pushes the last column to the panel edge instead of leaving the row
+  /// Pushes the last column towards the panel edge instead of leaving the row
   /// trailing off with slack behind it.
   static const flex = 'flex';
+
+  /// Keeps the last column off the panel frame. The first column needs no such
+  /// margin: its content is a small dot inside a wide cell, so it already
+  /// looks inset. A right-flushed number has no such slack of its own.
+  static const tail = 14.0;
 
   /// The running order. Doubles are fixed spacers, [flex] is the elastic one.
   static const layout = <Object>[
@@ -503,6 +535,7 @@ abstract final class _Table {
     root,
     flex,
     uptime,
+    tail,
   ];
 }
 
