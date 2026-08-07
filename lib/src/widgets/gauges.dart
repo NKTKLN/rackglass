@@ -79,6 +79,17 @@ class SparkText extends StatelessWidget {
     this.max,
   });
 
+  /// A strip on the same fixed 0-100 scale the bar gauges use, so a reading and
+  /// its history never contradict each other on screen.
+  const SparkText.percent({
+    super.key,
+    required this.values,
+    this.width,
+    this.size = TZ.body,
+    this.color = TC.dim,
+  }) : min = 0,
+       max = 100;
+
   final List<double> values;
   final int? width;
   final double size;

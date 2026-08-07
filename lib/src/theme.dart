@@ -72,6 +72,12 @@ abstract final class TZ {
 
   /// The one big number per panel.
   static const huge = 40.0;
+
+  /// Fixed band for temperature sparklines, in Celsius. Wide enough to cover a
+  /// cold idle and a throttling die, so the strip reports the real level
+  /// instead of magnifying sensor noise.
+  static const tempFloor = 20.0;
+  static const tempCeiling = 100.0;
 }
 
 const kFont = 'JetBrainsMono';

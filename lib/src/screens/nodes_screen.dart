@@ -484,7 +484,7 @@ class _MetricBlock extends StatelessWidget {
         BarGauge(pct: pct, width: 20, color: color),
         if (spark.isNotEmpty) ...[
           const SizedBox(height: 2),
-          SparkText(values: spark, width: 20, color: TC.dim, min: 0),
+          SparkText.percent(values: spark, color: TC.dim),
         ],
         const SizedBox(height: 6),
         for (final (k, v) in lines)

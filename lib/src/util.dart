@@ -16,7 +16,12 @@ String barText(double? pct, int width) {
   return '█' * full + partial + '░' * (width - used).clamp(0, width);
 }
 
-/// Inline sparkline from a value series, scaled to its own min/max.
+/// Inline sparkline from a value series.
+///
+/// [min] and [max] pin the scale. Leave them out and the strip autoscales to
+/// the window, which puts the largest sample at full height *by construction* —
+/// a CPU idling at 12% then draws a solid wall. Pin the scale whenever an
+/// absolute reading sits next to the strip, or the two disagree on screen.
 ///
 /// Under three samples there is no shape to draw yet — a lone block would read
 /// as a spike — so the strip stays an empty dotted track until history builds.

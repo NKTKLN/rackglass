@@ -145,20 +145,21 @@ class _CpuPanel extends StatelessWidget {
               Expanded(
                 child: SparkText(
                   values: store.hostTempHistory,
-                  width: 18,
                   size: TZ.body,
                   color: tempColor,
+                  // A fixed band: without it a 0.4 °C wobble draws a mountain
+                  // range and the panel looks alarming for no reason.
+                  min: TZ.tempFloor,
+                  max: TZ.tempCeiling,
                 ),
               ),
               const SizedBox(width: 6),
               Text('CPU', style: ts(size: TZ.caption, color: TC.dim)),
               const SizedBox(width: 5),
-              SparkText(
+              SparkText.percent(
                 values: store.cpuHistory(host?.instance ?? ''),
-                width: 12,
                 size: TZ.body,
                 color: TC.mid,
-                min: 0,
               ),
             ],
           ),
@@ -557,11 +558,9 @@ class _NodeRow extends StatelessWidget {
               ),
               SizedBox(
                 width: _Col.cpuSpark,
-                child: SparkText(
+                child: SparkText.percent(
                   values: store.cpuHistory(n.instance),
-                  width: 8,
                   color: TC.dim,
-                  min: 0,
                 ),
               ),
               const SizedBox(width: 6),
@@ -589,9 +588,8 @@ class _NodeRow extends StatelessWidget {
               ),
               SizedBox(
                 width: _Col.memSpark,
-                child: SparkText(
+                child: SparkText.percent(
                   values: store.memHistory(n.instance),
-                  width: 8,
                   color: TC.dim,
                 ),
               ),
