@@ -26,19 +26,23 @@ enum AppMode {
 }
 
 class PromTermApp extends StatefulWidget {
-  const PromTermApp({super.key});
+  const PromTermApp({super.key, this.store, this.showBootSplash = true});
+
+  /// Injected in tests; production builds let the app own its store.
+  final MetricsStore? store;
+  final bool showBootSplash;
 
   @override
   State<PromTermApp> createState() => _PromTermAppState();
 }
 
 class _PromTermAppState extends State<PromTermApp> {
-  final MetricsStore _store = MetricsStore();
+  late final MetricsStore _store = widget.store ?? MetricsStore();
   final FocusNode _focus = FocusNode();
 
   AppMode _mode = AppMode.dash;
   bool _crt = true;
-  bool _booted = false;
+  late bool _booted = !widget.showBootSplash;
 
   // The GRAPHS screen owns expensive range queries, so it is kept alive across
   // tab switches instead of being rebuilt from scratch each time.
@@ -47,12 +51,15 @@ class _PromTermAppState extends State<PromTermApp> {
   @override
   void initState() {
     super.initState();
-    _store.start();
+    // An injected store is driven by whoever supplied it, so only a store we
+    // own gets put on the polling timer.
+    if (widget.store == null) _store.start();
   }
 
   @override
   void dispose() {
-    _store.dispose();
+    // Only tear down a store we created; an injected one belongs to the caller.
+    if (widget.store == null) _store.dispose();
     _focus.dispose();
     super.dispose();
   }

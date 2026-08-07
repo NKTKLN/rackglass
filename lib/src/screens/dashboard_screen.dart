@@ -306,11 +306,11 @@ class _MemoryPanel extends StatelessWidget {
             unit: '/ ${fmtBytes(total)}',
             color: TC.forPct(host?.memPct),
             caption: 'HOST RAM IN USE · ${fmtPct(host?.memPct, digits: 0)}',
-            size: 30,
+            size: 26,
           ),
           const SizedBox(height: 4),
           BarGauge(pct: host?.memPct, width: 34, size: 11),
-          const TermRule(height: 10),
+          const TermRule(height: 8),
           StatLine(
             label: 'SWAP',
             value:
@@ -320,7 +320,7 @@ class _MemoryPanel extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           BarGauge(pct: host?.swapPct, width: 34, size: 11),
-          const SizedBox(height: 5),
+          const SizedBox(height: 3),
           StatLine(
             label: 'VM ALLOCATED (${snap.vms.length} vm)',
             value: fmtBytes(snap.vmMemAllocated),
