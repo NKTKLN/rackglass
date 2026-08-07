@@ -127,45 +127,35 @@ void main() {
     );
   });
 
-  testWidgets('table cells line up under their headers and never overlap', (
+  testWidgets('every header sits at the left edge of its column', (
     tester,
   ) async {
     await pumpApp(tester);
 
-    // A column header and the cell beneath it must share an edge, or the table
-    // reads as scrambled even though nothing overflows.
-    void sharesLeft(Finder header, Finder cell, String what) {
+    // Header and cell are keyed in pairs, so this compares the boxes rather
+    // than whatever text happens to be inside them — a value can be flushed
+    // right inside its cell and still belong to a left-aligned heading.
+    for (final id in ['name', 'cpu', 'mem', 'root', 'uptime']) {
+      final head = find.byKey(ValueKey('head-$id'));
+      final cell = find.byKey(ValueKey('cell-$id-vm-node-1'));
+      expect(head, findsOneWidget, reason: 'header $id');
+      expect(cell, findsOneWidget, reason: 'cell $id');
       expect(
-        tester.getTopLeft(header).dx,
+        tester.getTopLeft(head).dx,
         moreOrLessEquals(tester.getTopLeft(cell).dx, epsilon: 0.5),
-        reason: '$what is not left-aligned with its header',
+        reason: '$id header is not aligned with its column',
+      );
+      expect(
+        tester.getTopRight(head).dx,
+        moreOrLessEquals(tester.getTopRight(cell).dx, epsilon: 0.5),
+        reason: '$id header and column are different widths',
       );
     }
+  });
 
-    sharesLeft(find.text('INSTANCE'), find.text('vm-node-1'), 'instance');
-    // 'MEMORY' is also the memory panel's title; the table header is the later
-    // of the two in tree order, and like CPU it sits right-aligned over its
-    // percent.
-    expect(
-      tester.getTopRight(find.text('MEMORY').last).dx,
-      moreOrLessEquals(tester.getTopRight(find.text('64%')).dx, epsilon: 0.5),
-      reason: 'MEMORY is not right-aligned with its percent',
-    );
+  testWidgets('nothing in a row overlaps anything else', (tester) async {
+    await pumpApp(tester);
 
-    // Right-aligned columns share their right edge instead. 'CPU' also labels
-    // a strip in the host panel, so take the later one.
-    expect(
-      tester.getTopRight(find.text('CPU').last).dx,
-      moreOrLessEquals(
-        tester.getTopRight(find.text('10.6%')).dx,
-        epsilon: 0.5,
-      ),
-      reason: 'CPU% is not right-aligned with its header',
-    );
-
-    sharesLeft(find.text('ROOT'), find.text('13.3G/61.0G'), 'root');
-
-    // Nothing in a row may sit on top of anything else in that row.
     final cells = <String, Rect>{
       'name': tester.getRect(find.text('vm-node-1')),
       'cpu': tester.getRect(find.text('10.6%')),

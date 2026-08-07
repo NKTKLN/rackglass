@@ -454,7 +454,7 @@ class _NodeTable extends StatelessWidget {
     final down = guests.where((n) => !n.up).length;
 
     return TermPanel(
-      title: 'guests · ${guests.length}',
+      title: 'nodes · ${guests.length}',
       trailing: down > 0 ? TermTag('$down DOWN', color: TC.red) : null,
       padding: const EdgeInsets.fromLTRB(8, TermPanel.titleGutter, 8, 6),
       child: Column(
@@ -488,11 +488,15 @@ class _TableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget h(String t, double w, {TextAlign a = TextAlign.left}) => SizedBox(
+    // Every header sits at the left edge of its group. Values inside a group
+    // keep their own alignment — a percentage still reads better flushed
+    // right against its bar — but the headings form one clean column of
+    // starts across the table.
+    Widget h(String t, double w, {String? id}) => SizedBox(
+      key: id == null ? null : ValueKey('head-$id'),
       width: w,
       child: Text(
         t,
-        textAlign: a,
         style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
         maxLines: 1,
         overflow: TextOverflow.clip,
@@ -502,22 +506,21 @@ class _TableHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         h('', _Col.dot),
-        h('INSTANCE', _Col.name),
+        h('INSTANCE', _Col.name, id: 'name'),
         const SizedBox(width: _Col.gap),
-        h('CPU', _Col.cpuPct, a: TextAlign.right),
+        h('CPU', _Col.cpuPct, id: 'cpu'),
         const SizedBox(width: _Col.pad),
         h('', _Col.cpuBar),
         const SizedBox(width: _Col.gap),
-        // Right-aligned over the percent, exactly as CPU labels its own.
-        h('MEMORY', _Col.memPct, a: TextAlign.right),
+        h('MEMORY', _Col.memPct, id: 'mem'),
         const SizedBox(width: _Col.pad),
         h('', _Col.memBar),
         const SizedBox(width: _Col.pad),
         h('', _Col.memText),
         const SizedBox(width: _Col.gap),
-        h('ROOT', _Col.root),
+        h('ROOT', _Col.root, id: 'root'),
         const SizedBox(width: _Col.gap),
-        h('UPTIME', _Col.uptime, a: TextAlign.right),
+        h('UPTIME', _Col.uptime, id: 'uptime'),
         const Spacer(),
       ],
     );
@@ -542,8 +545,16 @@ class _NodeRow extends StatelessWidget {
 
     // Cells are stretched so the column rules run the full height of the row;
     // each one aligns its own content vertically.
-    Widget cell(double width, Widget child, {Alignment align = Alignment.centerLeft}) =>
-        SizedBox(width: width, child: Align(alignment: align, child: child));
+    Widget cell(
+      double width,
+      Widget child, {
+      Alignment align = Alignment.centerLeft,
+      String? id,
+    }) => SizedBox(
+      key: id == null ? null : ValueKey('cell-$id-${n.instance}'),
+      width: width,
+      child: Align(alignment: align, child: child),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -559,6 +570,7 @@ class _NodeRow extends StatelessWidget {
           cell(_Col.dot, StateDot(n.up, size: TZ.body)),
           cell(
             _Col.name,
+            id: 'name',
             Text(
               n.instance,
               style: ts(
@@ -573,6 +585,7 @@ class _NodeRow extends StatelessWidget {
           const SizedBox(width: _Col.gap),
           cell(
             _Col.cpuPct,
+            id: 'cpu',
             MaybeText(
               fmtPct(n.cpuPct),
               present: n.cpuPct != null,
@@ -592,6 +605,7 @@ class _NodeRow extends StatelessWidget {
           const SizedBox(width: _Col.gap),
           cell(
             _Col.memPct,
+            id: 'mem',
             MaybeText(
               fmtPct(n.memPct, digits: 0),
               present: n.memPct != null,
@@ -620,6 +634,7 @@ class _NodeRow extends StatelessWidget {
           const SizedBox(width: _Col.gap),
           cell(
             _Col.root,
+            id: 'root',
             MaybeText(
               '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
               present: n.fsSize != null,
@@ -630,6 +645,7 @@ class _NodeRow extends StatelessWidget {
           const SizedBox(width: _Col.gap),
           cell(
             _Col.uptime,
+            id: 'uptime',
             MaybeText(
               fmtDuration(n.uptime),
               present: n.bootTime != null,
