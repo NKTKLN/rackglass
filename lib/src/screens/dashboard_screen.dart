@@ -438,6 +438,14 @@ abstract final class _Col {
 
   /// Breathing room between a reading and the bar that repeats it.
   static const pad = 8.0;
+
+  // Group spans. A heading is centred over the whole group it names, so these
+  // have to be the sum of what the row puts inside each one.
+  static const nameGroup = dot + name;
+  static const cpuGroup = cpuPct + pad + cpuBar;
+  static const memGroup = memPct + pad + memBar + pad + memText;
+  static const rootGroup = root;
+  static const uptimeGroup = uptime;
 }
 
 class _NodeTable extends StatelessWidget {
@@ -488,15 +496,12 @@ class _TableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Every header sits at the left edge of its group. Values inside a group
-    // keep their own alignment — a percentage still reads better flushed
-    // right against its bar — but the headings form one clean column of
-    // starts across the table.
-    Widget h(String t, double w, {String? id}) => SizedBox(
-      key: id == null ? null : ValueKey('head-$id'),
+    Widget h(String t, double w, String id) => SizedBox(
+      key: ValueKey('head-$id'),
       width: w,
       child: Text(
         t,
+        textAlign: TextAlign.center,
         style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
         maxLines: 1,
         overflow: TextOverflow.clip,
@@ -505,22 +510,15 @@ class _TableHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        h('', _Col.dot),
-        h('INSTANCE', _Col.name, id: 'name'),
+        h('INSTANCE', _Col.nameGroup, 'name'),
         const SizedBox(width: _Col.gap),
-        h('CPU', _Col.cpuPct, id: 'cpu'),
-        const SizedBox(width: _Col.pad),
-        h('', _Col.cpuBar),
+        h('CPU', _Col.cpuGroup, 'cpu'),
         const SizedBox(width: _Col.gap),
-        h('MEMORY', _Col.memPct, id: 'mem'),
-        const SizedBox(width: _Col.pad),
-        h('', _Col.memBar),
-        const SizedBox(width: _Col.pad),
-        h('', _Col.memText),
+        h('MEMORY', _Col.memGroup, 'mem'),
         const SizedBox(width: _Col.gap),
-        h('ROOT', _Col.root, id: 'root'),
+        h('ROOT', _Col.rootGroup, 'root'),
         const SizedBox(width: _Col.gap),
-        h('UPTIME', _Col.uptime, id: 'uptime'),
+        h('UPTIME', _Col.uptimeGroup, 'uptime'),
         const Spacer(),
       ],
     );
@@ -543,18 +541,19 @@ class _NodeRow extends StatelessWidget {
     final n = node;
     final nameColor = n.up ? (n.isHypervisor ? TC.cyan : TC.bright) : TC.red;
 
-    // Cells are stretched so the column rules run the full height of the row;
-    // each one aligns its own content vertically.
+    // Groups are real boxes here, the same widths the header centres its
+    // labels over. Anything else drifts the moment a column changes.
+    Widget group(String id, double width, List<Widget> children) => SizedBox(
+      key: ValueKey('cell-$id-${n.instance}'),
+      width: width,
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    );
+
     Widget cell(
       double width,
       Widget child, {
       Alignment align = Alignment.centerLeft,
-      String? id,
-    }) => SizedBox(
-      key: id == null ? null : ValueKey('cell-$id-${n.instance}'),
-      width: width,
-      child: Align(alignment: align, child: child),
-    );
+    }) => SizedBox(width: width, child: Align(alignment: align, child: child));
 
     return Container(
       decoration: BoxDecoration(
@@ -567,94 +566,99 @@ class _NodeRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          cell(_Col.dot, StateDot(n.up, size: TZ.body)),
-          cell(
-            _Col.name,
-            id: 'name',
-            Text(
-              n.instance,
-              style: ts(
+          group('name', _Col.nameGroup, [
+            cell(_Col.dot, StateDot(n.up, size: TZ.body)),
+            cell(
+              _Col.name,
+              Text(
+                n.instance,
+                style: ts(
+                  size: TZ.large,
+                  color: nameColor,
+                  weight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ]),
+          const SizedBox(width: _Col.gap),
+          group('cpu', _Col.cpuGroup, [
+            cell(
+              _Col.cpuPct,
+              MaybeText(
+                fmtPct(n.cpuPct),
+                present: n.cpuPct != null,
+                align: TextAlign.right,
                 size: TZ.large,
-                color: nameColor,
+                color: TC.forPct(n.cpuPct),
                 weight: FontWeight.w500,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              align: Alignment.centerRight,
             ),
-          ),
+            const SizedBox(width: _Col.pad),
+            cell(
+              _Col.cpuBar,
+              BarGauge(pct: n.cpuPct, size: TZ.large),
+              align: Alignment.centerRight,
+            ),
+          ]),
           const SizedBox(width: _Col.gap),
-          cell(
-            _Col.cpuPct,
-            id: 'cpu',
-            MaybeText(
-              fmtPct(n.cpuPct),
-              present: n.cpuPct != null,
-              align: TextAlign.right,
-              size: TZ.large,
-              color: TC.forPct(n.cpuPct),
-              weight: FontWeight.w500,
+          group('mem', _Col.memGroup, [
+            cell(
+              _Col.memPct,
+              MaybeText(
+                fmtPct(n.memPct, digits: 0),
+                present: n.memPct != null,
+                align: TextAlign.right,
+                size: TZ.large,
+                color: TC.forPct(n.memPct),
+                weight: FontWeight.w500,
+              ),
+              align: Alignment.centerRight,
             ),
-            align: Alignment.centerRight,
-          ),
-          const SizedBox(width: _Col.pad),
-          cell(
-            _Col.cpuBar,
-            BarGauge(pct: n.cpuPct, size: TZ.large),
-            align: Alignment.centerRight,
-          ),
+            const SizedBox(width: _Col.pad),
+            cell(
+              _Col.memBar,
+              BarGauge(pct: n.memPct, size: TZ.large),
+              align: Alignment.centerRight,
+            ),
+            const SizedBox(width: _Col.pad),
+            cell(
+              _Col.memText,
+              MaybeText(
+                '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
+                present: n.memTotal != null,
+                size: TZ.large,
+              ),
+            ),
+          ]),
           const SizedBox(width: _Col.gap),
-          cell(
-            _Col.memPct,
-            id: 'mem',
-            MaybeText(
-              fmtPct(n.memPct, digits: 0),
-              present: n.memPct != null,
-              align: TextAlign.right,
-              size: TZ.large,
-              color: TC.forPct(n.memPct),
-              weight: FontWeight.w500,
+          group('root', _Col.rootGroup, [
+            cell(
+              _Col.root,
+              MaybeText(
+                '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
+                present: n.fsSize != null,
+                size: TZ.large,
+                color: TC.mid,
+              ),
             ),
-            align: Alignment.centerRight,
-          ),
-          const SizedBox(width: _Col.pad),
-          cell(
-            _Col.memBar,
-            BarGauge(pct: n.memPct, size: TZ.large),
-            align: Alignment.centerRight,
-          ),
-          const SizedBox(width: _Col.pad),
-          cell(
-            _Col.memText,
-            MaybeText(
-              '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
-              present: n.memTotal != null,
-              size: TZ.large,
-            ),
-          ),
+          ]),
           const SizedBox(width: _Col.gap),
-          cell(
-            _Col.root,
-            id: 'root',
-            MaybeText(
-              '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
-              present: n.fsSize != null,
-              size: TZ.large,
-              color: TC.mid,
+          group('uptime', _Col.uptimeGroup, [
+            cell(
+              _Col.uptime,
+              MaybeText(
+                fmtDuration(n.uptime),
+                present: n.bootTime != null,
+                align: TextAlign.right,
+                size: TZ.body,
+                color: TC.mid,
+              ),
+              align: Alignment.centerRight,
             ),
-          ),
-          const SizedBox(width: _Col.gap),
-          cell(
-            _Col.uptime,
-            id: 'uptime',
-            MaybeText(
-              fmtDuration(n.uptime),
-              present: n.bootTime != null,
-              align: TextAlign.right,
-              size: TZ.body,
-              color: TC.mid,
-            ),
-            align: Alignment.centerRight,
-          ),
+          ]),
           const Spacer(),
         ],
       ),
