@@ -59,10 +59,17 @@ abstract final class Q {
   static final gpuSmClock = _last('DCGM_FI_DEV_SM_CLOCK');
   static final gpuMemClock = _last('DCGM_FI_DEV_MEM_CLOCK');
 
-  /// Seconds since the GPU exporter last produced a sample. `timestamp()` loses
-  /// the original sample time through `last_over_time`, so this goes through a
-  /// subquery instead.
-  static const gpuAge =
+  /// Seconds since the GPU exporter last produced a sample, while the series is
+  /// fresh. Empty once the last sample falls outside Prometheus' lookback
+  /// window, which is the point of [gpuAgeDeep].
+  static const gpuAgeFresh = 'time() - timestamp(DCGM_FI_DEV_GPU_TEMP)';
+
+  /// Age of a series that stopped long ago. `timestamp()` loses the original
+  /// sample time through `last_over_time`, so this walks a subquery instead —
+  /// and a subquery only evaluates on its own step boundaries, so the answer
+  /// climbs from 0 to a full step and resets. Fine for "down since yesterday",
+  /// useless for "is it live", which is why the fresh query goes first.
+  static const gpuAgeDeep =
       'time() - max_over_time(timestamp(DCGM_FI_DEV_GPU_TEMP)[$_gpuWindow:5m])';
 
   // ---- range queries for the GRAPHS screen ---------------------------------

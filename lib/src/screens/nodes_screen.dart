@@ -96,25 +96,6 @@ class _NodesScreenState extends State<NodesScreen> {
                     selected: n.instance == selected.instance,
                     onTap: () => setState(() => _selected = n.instance),
                   ),
-                const Spacer(),
-                for (final g in snap.gpus)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        StateDot(!g.stale, size: TZ.small),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            'gpu${g.gpu} ${g.modelShort}',
-                            style: ts(size: TZ.caption, color: TC.mid),
-                            maxLines: 1,
-                            softWrap: false,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),

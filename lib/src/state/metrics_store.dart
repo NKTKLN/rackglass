@@ -130,7 +130,8 @@ class MetricsStore extends ChangeNotifier {
       _client.instant(Q.gpuMemClock), // 23
       _client.instant(Q.gpuMemTemp), // 24
       _client.instant(Q.gpuMemCopyUtil), // 25
-      _client.instant(Q.gpuAge), // 26
+      _client.instant(Q.gpuAgeDeep), // 26
+      _client.instant(Q.gpuAgeFresh), // 27
     ]);
 
     final up = results[0];
@@ -212,7 +213,8 @@ class MetricsStore extends ChangeNotifier {
       memClock: results[23],
       memTemp: results[24],
       memCopyUtil: results[25],
-      age: results[26],
+      ageDeep: results[26],
+      ageFresh: results[27],
       exporterUp: dcgmUp,
     );
 
@@ -235,7 +237,8 @@ class MetricsStore extends ChangeNotifier {
     required List<PromSample> memClock,
     required List<PromSample> memTemp,
     required List<PromSample> memCopyUtil,
-    required List<PromSample> age,
+    required List<PromSample> ageDeep,
+    required List<PromSample> ageFresh,
     required Map<String, bool> exporterUp,
   }) {
     // A GPU is identified by (instance, gpu index); every metric carries both.
@@ -253,7 +256,10 @@ class MetricsStore extends ChangeNotifier {
     final memClockBy = keyed(memClock);
     final memTempBy = keyed(memTemp);
     final copyBy = keyed(memCopyUtil);
-    final ageBy = keyed(age);
+    final deepBy = keyed(ageDeep);
+    // A live series answers exactly; only a long-dead one needs the subquery,
+    // where being a few minutes out makes no difference to anything.
+    final freshBy = keyed(ageFresh);
 
     final out = <GpuStat>[];
     for (final s in temp) {
@@ -265,7 +271,7 @@ class MetricsStore extends ChangeNotifier {
           instance: inst,
           model: s.labels['modelName'] ?? 'GPU',
           exporterUp: exporterUp[inst] ?? false,
-          ageSeconds: ageBy[k],
+          ageSeconds: freshBy[k] ?? deepBy[k],
           temp: tempBy[k],
           memTemp: memTempBy[k],
           util: utilBy[k],

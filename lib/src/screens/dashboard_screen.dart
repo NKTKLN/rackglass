@@ -42,7 +42,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(width: 6),
               SizedBox(width: 344, child: _GpuPanel(snap: snap, store: store)),
               const SizedBox(width: 6),
-              Expanded(child: _MemoryPanel(snap: snap)),
+              Expanded(child: _MemoryPanel(snap: snap, store: store)),
             ],
           ),
         ),
@@ -385,9 +385,10 @@ class _InlineBar extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _MemoryPanel extends StatelessWidget {
-  const _MemoryPanel({required this.snap});
+  const _MemoryPanel({required this.snap, required this.store});
 
   final Snapshot snap;
+  final MetricsStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -432,6 +433,20 @@ class _MemoryPanel extends StatelessWidget {
             value: fmtBytes(snap.vmMemUsed),
             size: TZ.body,
             emphasis: false,
+          ),
+          const Spacer(),
+          Row(
+            children: [
+              Text('RAM', style: ts(size: TZ.caption, color: TC.dim)),
+              const SizedBox(width: 5),
+              Expanded(
+                child: SparkText.percent(
+                  values: store.memHistory(host?.instance ?? ''),
+                  size: TZ.body,
+                  color: TC.mid,
+                ),
+              ),
+            ],
           ),
         ],
       ),

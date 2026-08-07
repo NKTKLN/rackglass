@@ -33,7 +33,8 @@ void main() {
       'netRx': Q.netRx,
       'cpuTemp': Q.cpuTemp,
       'gpuTemp': Q.gpuTemp,
-      'gpuAge': Q.gpuAge,
+      'gpuAgeFresh': Q.gpuAgeFresh,
+      'gpuAgeDeep': Q.gpuAgeDeep,
     };
 
     for (final e in expressions.entries) {
