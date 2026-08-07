@@ -10,12 +10,20 @@ import '../util.dart';
 /// so a cell that does not fit is not cosmetic loss — it silently drops the
 /// most recent reading and leaves an older one looking current.
 int _cellsFor(double maxWidth, double size, int? want) {
+  // An unbounded box carries no information about how long the gauge should
+  // be. Silently falling back to one cell is how a strip ends up a single
+  // block next to an Expanded sibling that ate the row, so say so loudly.
+  assert(
+    maxWidth.isFinite || want != null,
+    'a gauge with an unbounded width needs an explicit width cap — wrap it in '
+    'an Expanded/SizedBox, or pass width:',
+  );
   final probe = TextPainter(
     text: TextSpan(text: '█', style: ts(size: size)),
     textDirection: TextDirection.ltr,
   )..layout();
   final advance = probe.width;
-  if (advance <= 0 || !maxWidth.isFinite) return want ?? 1;
+  if (advance <= 0 || !maxWidth.isFinite) return want ?? 8;
   final fits = (maxWidth / advance).floor();
   final n = want == null ? fits : (fits < want ? fits : want);
   return n < 1 ? 1 : n;

@@ -138,6 +138,10 @@ class _CpuPanel extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          // Both strips are Expanded so they split the leftover evenly. One
+          // Expanded and one loose child would hand the whole row to the first
+          // and leave the second with whatever the fit logic makes of an
+          // unbounded width.
           Row(
             children: [
               Text('TEMP', style: ts(size: TZ.caption, color: TC.dim)),
@@ -153,13 +157,15 @@ class _CpuPanel extends StatelessWidget {
                   max: TZ.tempCeiling,
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text('CPU', style: ts(size: TZ.caption, color: TC.dim)),
               const SizedBox(width: 5),
-              SparkText.percent(
-                values: store.cpuHistory(host?.instance ?? ''),
-                size: TZ.body,
-                color: TC.mid,
+              Expanded(
+                child: SparkText.percent(
+                  values: store.cpuHistory(host?.instance ?? ''),
+                  size: TZ.body,
+                  color: TC.mid,
+                ),
               ),
             ],
           ),

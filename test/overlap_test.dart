@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:promterm/src/app.dart';
 import 'package:promterm/src/prom/prom_client.dart';
 import 'package:promterm/src/state/metrics_store.dart';
+import 'package:promterm/src/widgets/gauges.dart';
 
 import 'fake_prometheus.dart';
 
@@ -121,13 +122,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
 
-    final gaugeGlyphs = RegExp(r'^[█▉▊▋▌▍▎▏░·▁▂▃▄▅▆▇ ]+$');
     final clipped = <String>[];
+    final degenerate = <String>[];
     var inspected = 0;
     for (final el in find.byType(Text).evaluate()) {
+      // Identify gauges by what drew them, not by their glyphs: the blinking
+      // cursor is a block character too, and matching on the alphabet picked
+      // it up as a one-cell gauge.
+      final isGauge = el.findAncestorWidgetOfExactType<BarGauge>() != null ||
+          el.findAncestorWidgetOfExactType<SparkText>() != null;
+      if (!isGauge) continue;
       final widget = el.widget as Text;
       final label = widget.data ?? widget.textSpan?.toPlainText() ?? '';
-      if (label.isEmpty || !gaugeGlyphs.hasMatch(label)) continue;
       final render = el.renderObject as RenderParagraph;
       if (!render.hasSize) continue;
       inspected++;
@@ -137,6 +143,12 @@ void main() {
           '"$label" wants ${wants.toStringAsFixed(1)}px '
           'in ${render.size.width.toStringAsFixed(1)}px',
         );
+      }
+      // A gauge that collapsed to a couple of cells carries no reading. It
+      // happens when a sibling Expanded eats the row, and it looks like a
+      // stray block rather than like a bug.
+      if (label.trim().length < 4) {
+        degenerate.add('"$label" rendered only ${label.trim().length} cells');
       }
     }
     // Without this the check passes by finding nothing — a glyph added to the
@@ -151,6 +163,11 @@ void main() {
       clipped,
       isEmpty,
       reason: '$mode clips a gauge:\n${clipped.join("\n")}',
+    );
+    expect(
+      degenerate,
+      isEmpty,
+      reason: '$mode collapses a gauge:\n${degenerate.join("\n")}',
     );
   }
 
