@@ -20,6 +20,11 @@ dcgm-exporter.
 Other keys: `←` `→` cycle modes, `r` force a refresh, `q` / `Esc` quit. Every
 tab and button is also a touch target sized for a finger on a 7" screen.
 
+There is no title bar. Mode buttons, link state and the clock share one row —
+the app name and the endpoint told you nothing you could act on, and the row
+they cost is worth more to the data. The endpoint lives in the diagnostics line
+at the bottom, next to the poll time.
+
 ## Typography
 
 The panel is roughly 170 DPI and gets read at arm's length, so nothing is set
@@ -65,9 +70,14 @@ Everything is laid out against a fixed 1024x600 canvas and then scaled with a
 larger copy, and no arrangement of data can push a widget off screen.
 
 Table columns are declared once as constants shared by the header and the rows,
-and a test asserts they still share an edge and that no two cells in a row
-overlap — misalignment is the failure mode that looks broken without ever
-triggering an overflow error.
+and a test asserts they still share an edge.
+
+`test/overlap_test.dart` goes further: on every mode it collects the rect of
+each visible `Text` and fails if any two share pixels. That is the failure mode
+no overflow check catches — a panel title sitting on the first row of content, a
+label with no room to ellipsize — and it looks broken on the panel while every
+other test stays green. Panel titles hang off the top border, so `TermPanel`
+exposes the `titleGutter` its callers must leave for them.
 
 ## Handling missing data
 

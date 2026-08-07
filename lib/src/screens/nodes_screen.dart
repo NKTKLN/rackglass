@@ -86,7 +86,7 @@ class _NodesScreenState extends State<NodesScreen> {
           width: 262,
           child: TermPanel(
             title: 'targets',
-            padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
+            padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 6, 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -235,7 +235,7 @@ class _Detail extends StatelessWidget {
     return TermPanel(
       title: '${n.instance} · ${n.role}',
       trailing: TermTag(n.up ? 'UP' : 'DOWN', color: n.up ? TC.green : TC.red),
-      padding: const EdgeInsets.fromLTRB(10, 14, 10, 8),
+      padding: const EdgeInsets.fromLTRB(10, TermPanel.titleGutter, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

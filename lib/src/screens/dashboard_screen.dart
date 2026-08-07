@@ -13,7 +13,7 @@ class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, required this.store});
 
   /// Height budget for the top row of panels. The node table takes the rest.
-  static const _panelRow = 182.0;
+  static const _panelRow = 196.0;
 
   final MetricsStore store;
 
@@ -433,7 +433,7 @@ class _NodeTable extends StatelessWidget {
       trailing: snap.targetsDown > 0
           ? TermTag('${snap.targetsDown} DOWN', color: TC.red)
           : null,
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, TermPanel.titleGutter, 8, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -69,8 +69,8 @@ void main() {
   ) async {
     await pumpApp(tester);
 
-    // Header and mode bar.
-    expect(find.text('PROMTERM'), findsOneWidget);
+    // One top bar: mode buttons, link state, clock. No title, no endpoint.
+    expect(find.text('● ONLINE'), findsOneWidget);
     expect(find.text('DASH'), findsOneWidget);
     expect(find.text('GRAPHS'), findsOneWidget);
     expect(find.text('NODES'), findsOneWidget);

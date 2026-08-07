@@ -139,8 +139,11 @@ class _PromTermAppState extends State<PromTermApp> {
       animation: _store,
       builder: (context, _) => Column(
         children: [
-          _HeaderBar(store: _store),
-          _TabBar(mode: _mode, onPick: (m) => setState(() => _mode = m)),
+          _TopBar(
+            store: _store,
+            mode: _mode,
+            onPick: (m) => setState(() => _mode = m),
+          ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
@@ -173,21 +176,29 @@ class _PromTermAppState extends State<PromTermApp> {
 
 /// Fixed heights for the frame around the content, in design pixels.
 abstract final class Chrome {
-  static const header = 34.0;
-  static const tabs = 42.0;
+  static const top = 52.0;
   static const status = 26.0;
 }
 
-class _HeaderBar extends StatefulWidget {
-  const _HeaderBar({required this.store});
+/// Mode buttons, link state and the clock on one line. There is no separate
+/// title bar: the app name and the endpoint told you nothing you could act on,
+/// and the row they cost is worth more to the data.
+class _TopBar extends StatefulWidget {
+  const _TopBar({
+    required this.store,
+    required this.mode,
+    required this.onPick,
+  });
 
   final MetricsStore store;
+  final AppMode mode;
+  final ValueChanged<AppMode> onPick;
 
   @override
-  State<_HeaderBar> createState() => _HeaderBarState();
+  State<_TopBar> createState() => _TopBarState();
 }
 
-class _HeaderBarState extends State<_HeaderBar> {
+class _TopBarState extends State<_TopBar> {
   Timer? _clock;
 
   @override
@@ -207,75 +218,38 @@ class _HeaderBarState extends State<_HeaderBar> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.store;
-    final ok = s.healthy;
+    final ok = widget.store.healthy;
     return Container(
-      height: Chrome.header,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: TC.border)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            'PROMTERM',
-            style: ts(
-              size: TZ.title,
-              color: TC.bright,
-              weight: FontWeight.w700,
-              letterSpacing: 2,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text('│', style: ts(size: TZ.large, color: TC.border)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              s.endpoint.replaceFirst(RegExp(r'^https?://'), ''),
-              style: ts(size: TZ.small, color: TC.mid),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            ok ? '● ONLINE' : '● ${(s.error ?? "OFFLINE").toUpperCase()}',
-            style: ts(
-              size: TZ.small,
-              color: ok ? TC.green : TC.red,
-              weight: FontWeight.w700,
-            ),
-            maxLines: 1,
-            softWrap: false,
-          ),
-          const SizedBox(width: 12),
-          Text('│', style: ts(size: TZ.large, color: TC.border)),
-          const SizedBox(width: 12),
-          Text(fmtDate(DateTime.now()), style: ts(color: TC.bright)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabBar extends StatelessWidget {
-  const _TabBar({required this.mode, required this.onPick});
-
-  final AppMode mode;
-  final ValueChanged<AppMode> onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: Chrome.tabs,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      height: Chrome.top,
+      // Bottom padding keeps the buttons clear of the divider rule; without it
+      // the two rectangles read as one smudged line.
+      padding: const EdgeInsets.fromLTRB(6, 6, 8, 8),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: TC.border)),
       ),
       child: Row(
         children: [
           for (final m in AppMode.values)
-            _Tab(mode: m, selected: m == mode, onTap: () => onPick(m)),
+            _Tab(
+              mode: m,
+              selected: m == widget.mode,
+              onTap: () => widget.onPick(m),
+            ),
+          const Spacer(),
+          Text(
+            ok ? '● ONLINE' : '● ${(widget.store.error ?? "OFFLINE").toUpperCase()}',
+            style: ts(
+              color: ok ? TC.green : TC.red,
+              weight: FontWeight.w700,
+            ),
+            maxLines: 1,
+            softWrap: false,
+          ),
+          const SizedBox(width: 14),
+          Text(
+            fmtDate(DateTime.now()),
+            style: ts(size: TZ.large, color: TC.bright),
+          ),
         ],
       ),
     );
@@ -297,7 +271,7 @@ class _Tab extends StatelessWidget {
       child: Container(
         // Wide enough to be a comfortable touch target on a 7" panel.
         constraints: const BoxConstraints(minWidth: 150),
-        margin: const EdgeInsets.only(right: 5, top: 5),
+        margin: const EdgeInsets.only(right: 5),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           // Selected tab is inverted, the way a console highlight looks.
@@ -309,10 +283,7 @@ class _Tab extends StatelessWidget {
           children: [
             Text(
               mode.key,
-              style: ts(
-                size: TZ.caption,
-                color: selected ? TC.bg : TC.dim,
-              ),
+              style: ts(size: TZ.caption, color: selected ? TC.bg : TC.dim),
             ),
             const SizedBox(width: 6),
             Text(
@@ -361,6 +332,7 @@ class _StatusBar extends StatelessWidget {
                   )
                 : snap != null
                 ? Text(
+                    '${store.endpoint.replaceFirst(RegExp(r"^https?://"), "")} · '
                     '${snap.nodes.length} node targets · ${snap.targetsDown} down · '
                     '${snap.gpus.length} gpu · poll ${snap.fetchMillis}ms · '
                     'updated ${fmtClock(snap.at)}',

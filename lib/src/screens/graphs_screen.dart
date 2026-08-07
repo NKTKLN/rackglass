@@ -124,7 +124,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'utilisation %',
-                        padding: const EdgeInsets.fromLTRB(6, 12, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
                         child: TermChart(
                           // GPU util belongs here rather than next to a byte
                           // rate: everything on this axis is a percentage.
@@ -147,7 +147,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'memory used %',
-                        padding: const EdgeInsets.fromLTRB(6, 12, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
                         child: TermChart(
                           series: _byInstance(_mem),
                           window: _window,
@@ -167,7 +167,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'temperature °c',
-                        padding: const EdgeInsets.fromLTRB(6, 12, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
                         child: TermChart(
                           series: [
                             for (final s in _cpuTemp)
@@ -192,7 +192,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'network rx · kb/s',
-                        padding: const EdgeInsets.fromLTRB(6, 12, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
                         child: TermChart(
                           // Its own panel and its own axis: a few KB/s would be
                           // a flat line at zero if it shared one with a 0-100

@@ -13,8 +13,14 @@ class TermPanel extends StatelessWidget {
     this.trailing,
     this.accent = TC.border,
     this.titleColor = TC.mid,
-    this.padding = const EdgeInsets.fromLTRB(10, 14, 10, 8),
+    this.padding = defaultPadding,
   });
+
+  /// The title box hangs off the top border at `top: -1` and is one caption
+  /// line tall, so content has to start below it — anything less and the title
+  /// clips the first row of the panel.
+  static const titleGutter = 20.0;
+  static const defaultPadding = EdgeInsets.fromLTRB(10, titleGutter, 10, 8);
 
   final String title;
   final Widget child;
