@@ -76,16 +76,22 @@ void main() {
     expect(find.text('NODES'), findsOneWidget);
     expect(find.text('CAPTURE'), findsOneWidget);
 
-    // Every scrape target has a row.
+    // Every scrape target has a row, including the down one.
     for (final name in [
       'pve-host',
       'vm-node-1',
       'vm-ops-node',
       'vm-vpn',
       'vm-amnezia-proxy',
+      'vm-gpu-worker-1',
     ]) {
       expect(find.text(name), findsOneWidget, reason: 'row for $name');
     }
+    expect(find.text('[ 1 DOWN ]'), findsOneWidget);
+    // The down target has no series behind it: those cells must read `--`,
+    // never a fabricated 0.
+    expect(find.text('gpu-workers'), findsOneWidget);
+    expect(find.text('--'), findsWidgets);
 
     // CPU package temperature is picked out of hwmon by label, not sensor id.
     expect(find.text('43.4'), findsOneWidget);

@@ -18,6 +18,7 @@ class FakePrometheus {
   int rangeCalls = 0;
   final List<String> queries = [];
 
+  /// Targets that are up and exporting.
   static const _nodes = <String, String>{
     'pve-host': 'hypervisor',
     'vm-node-1': 'nodes',
@@ -25,6 +26,11 @@ class FakePrometheus {
     'vm-vpn': 'vpn',
     'vm-amnezia-proxy': 'proxy',
   };
+
+  /// The GPU worker is scraped as a node target too, and it is down — so it
+  /// appears in `up` with no metrics behind it at all. Matches the live setup.
+  static const _downNode = 'vm-gpu-worker-1';
+  static const _downNodeRole = 'gpu-workers';
 
   static const _cpu = {
     'pve-host': 9.19,
@@ -135,7 +141,16 @@ class FakePrometheus {
         {
           'metric': {
             '__name__': 'up',
-            'instance': 'vm-gpu-worker-1',
+            'instance': _downNode,
+            'job': 'node',
+            'role': _downNodeRole,
+          },
+          'value': [_now, gpuUp ? '1' : '0'],
+        },
+        {
+          'metric': {
+            '__name__': 'up',
+            'instance': _downNode,
             'job': 'dcgm',
             'role': 'gpu',
           },
