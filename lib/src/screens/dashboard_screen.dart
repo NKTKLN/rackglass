@@ -414,38 +414,79 @@ class _MemoryPanel extends StatelessWidget {
 // Per-node table
 // ---------------------------------------------------------------------------
 
-/// Column widths, in design pixels. Kept as constants so the header and the
-/// rows can never drift apart, and sized off the widest real value each column
-/// has to hold at [TZ.large] (0.6em advance).
-///
-/// One line per node: the live reading only. Role and core count are static
-/// facts that belong on NODES, history has its own screen, and the second line
-/// of detail was costing more attention than it returned.
-abstract final class _Col {
-  static const dot = 24.0;
-  static const name = 186.0; // 'vm-amnezia-proxy'
-  static const cpuPct = 62.0; // '10.6%'
-  static const cpuBar = 104.0;
-  static const memText = 128.0; // '14.7G/31.3G'
-  static const memPct = 58.0; // '47%', and the 'MEMORY' header above it
-  static const memBar = 104.0;
-  static const root = 128.0; // '13.3G/61.0G'
-  static const uptime = 72.0; // '2d 2h'
+/// One column of the node table: how wide it is, what it is called, and which
+/// side its content sits on. The header row and the data rows both read these,
+/// so a label cannot drift away from the values beneath it.
+class _Column {
+  const _Column({
+    required this.id,
+    required this.width,
+    this.header = '',
+    this.right = false,
+  });
 
-  /// Gap between column groups. Whitespace does the separating; rules through
-  /// every row turned the table into a grid of boxes.
+  final String id;
+  final double width;
+  final String header;
+
+  /// Numbers are flushed right so their digits line up; names and compound
+  /// figures read left. A heading always takes the same side as its values —
+  /// that is what stops the header row looking scattered.
+  final bool right;
+
+  Alignment get align => right ? Alignment.centerRight : Alignment.centerLeft;
+  TextAlign get textAlign => right ? TextAlign.right : TextAlign.left;
+}
+
+/// The table, declared once. Widths are sized off the widest real value each
+/// column holds at [TZ.large] (0.6em advance); bars carry no heading because
+/// they only restate the number in front of them.
+abstract final class _Table {
+  static const dot = _Column(id: 'dot', width: 24);
+  static const name = _Column(id: 'name', width: 186, header: 'INSTANCE');
+  static const cpu = _Column(id: 'cpu', width: 62, header: 'CPU', right: true);
+  static const cpuBar = _Column(id: 'cpuBar', width: 104, right: true);
+  static const mem = _Column(
+    id: 'mem',
+    width: 58,
+    header: 'MEMORY',
+    right: true,
+  );
+  static const memBar = _Column(id: 'memBar', width: 104, right: true);
+  static const memText = _Column(id: 'memText', width: 128);
+  static const root = _Column(id: 'root', width: 128, header: 'ROOT');
+  static const uptime = _Column(
+    id: 'uptime',
+    width: 72,
+    header: 'UPTIME',
+    right: true,
+  );
+
+  /// Between column groups.
   static const gap = 20.0;
 
-  /// Breathing room between a reading and the bar that repeats it.
+  /// Between a number and the bar that repeats it.
   static const pad = 8.0;
 
-  // Group spans. A heading is centred over the whole group it names, so these
-  // have to be the sum of what the row puts inside each one.
-  static const nameGroup = dot + name;
-  static const cpuGroup = cpuPct + pad + cpuBar;
-  static const memGroup = memPct + pad + memBar + pad + memText;
-  static const rootGroup = root;
-  static const uptimeGroup = uptime;
+  /// The running order, gaps included. Doubles are spacers.
+  static const layout = <Object>[
+    dot,
+    name,
+    gap,
+    cpu,
+    pad,
+    cpuBar,
+    gap,
+    mem,
+    pad,
+    memBar,
+    pad,
+    memText,
+    gap,
+    root,
+    gap,
+    uptime,
+  ];
 }
 
 class _NodeTable extends StatelessWidget {
@@ -496,29 +537,28 @@ class _TableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget h(String t, double w, String id) => SizedBox(
-      key: ValueKey('head-$id'),
-      width: w,
-      child: Text(
-        t,
-        textAlign: TextAlign.center,
-        style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
-        maxLines: 1,
-        overflow: TextOverflow.clip,
-      ),
-    );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        h('INSTANCE', _Col.nameGroup, 'name'),
-        const SizedBox(width: _Col.gap),
-        h('CPU', _Col.cpuGroup, 'cpu'),
-        const SizedBox(width: _Col.gap),
-        h('MEMORY', _Col.memGroup, 'mem'),
-        const SizedBox(width: _Col.gap),
-        h('ROOT', _Col.rootGroup, 'root'),
-        const SizedBox(width: _Col.gap),
-        h('UPTIME', _Col.uptimeGroup, 'uptime'),
+        for (final item in _Table.layout)
+          if (item is double)
+            SizedBox(width: item)
+          else
+            SizedBox(
+              key: ValueKey('head-${(item as _Column).id}'),
+              width: item.width,
+              child: Align(
+                alignment: item.right
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: Text(
+                  item.header,
+                  style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                ),
+              ),
+            ),
         const Spacer(),
       ],
     );
@@ -541,19 +581,53 @@ class _NodeRow extends StatelessWidget {
     final n = node;
     final nameColor = n.up ? (n.isHypervisor ? TC.cyan : TC.bright) : TC.red;
 
-    // Groups are real boxes here, the same widths the header centres its
-    // labels over. Anything else drifts the moment a column changes.
-    Widget group(String id, double width, List<Widget> children) => SizedBox(
-      key: ValueKey('cell-$id-${n.instance}'),
-      width: width,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
-    );
-
-    Widget cell(
-      double width,
-      Widget child, {
-      Alignment align = Alignment.centerLeft,
-    }) => SizedBox(width: width, child: Align(alignment: align, child: child));
+    // Keyed by the same column ids the header uses, so the two are laid out
+    // from one description rather than two that have to be kept in step.
+    final content = <String, Widget>{
+      'dot': StateDot(n.up, size: TZ.body),
+      'name': Text(
+        n.instance,
+        style: ts(size: TZ.large, color: nameColor, weight: FontWeight.w500),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      'cpu': MaybeText(
+        fmtPct(n.cpuPct),
+        present: n.cpuPct != null,
+        align: TextAlign.right,
+        size: TZ.large,
+        color: TC.forPct(n.cpuPct),
+        weight: FontWeight.w500,
+      ),
+      'cpuBar': BarGauge(pct: n.cpuPct, size: TZ.large),
+      'mem': MaybeText(
+        fmtPct(n.memPct, digits: 0),
+        present: n.memPct != null,
+        align: TextAlign.right,
+        size: TZ.large,
+        color: TC.forPct(n.memPct),
+        weight: FontWeight.w500,
+      ),
+      'memBar': BarGauge(pct: n.memPct, size: TZ.large),
+      'memText': MaybeText(
+        '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
+        present: n.memTotal != null,
+        size: TZ.large,
+      ),
+      'root': MaybeText(
+        '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
+        present: n.fsSize != null,
+        size: TZ.large,
+        color: TC.mid,
+      ),
+      'uptime': MaybeText(
+        fmtDuration(n.uptime),
+        present: n.bootTime != null,
+        align: TextAlign.right,
+        size: TZ.body,
+        color: TC.mid,
+      ),
+    };
 
     return Container(
       decoration: BoxDecoration(
@@ -566,99 +640,18 @@ class _NodeRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          group('name', _Col.nameGroup, [
-            cell(_Col.dot, StateDot(n.up, size: TZ.body)),
-            cell(
-              _Col.name,
-              Text(
-                n.instance,
-                style: ts(
-                  size: TZ.large,
-                  color: nameColor,
-                  weight: FontWeight.w500,
+          for (final item in _Table.layout)
+            if (item is double)
+              SizedBox(width: item)
+            else
+              SizedBox(
+                key: ValueKey('cell-${(item as _Column).id}-${n.instance}'),
+                width: item.width,
+                child: Align(
+                  alignment: item.align,
+                  child: content[item.id],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ]),
-          const SizedBox(width: _Col.gap),
-          group('cpu', _Col.cpuGroup, [
-            cell(
-              _Col.cpuPct,
-              MaybeText(
-                fmtPct(n.cpuPct),
-                present: n.cpuPct != null,
-                align: TextAlign.right,
-                size: TZ.large,
-                color: TC.forPct(n.cpuPct),
-                weight: FontWeight.w500,
-              ),
-              align: Alignment.centerRight,
-            ),
-            const SizedBox(width: _Col.pad),
-            cell(
-              _Col.cpuBar,
-              BarGauge(pct: n.cpuPct, size: TZ.large),
-              align: Alignment.centerRight,
-            ),
-          ]),
-          const SizedBox(width: _Col.gap),
-          group('mem', _Col.memGroup, [
-            cell(
-              _Col.memPct,
-              MaybeText(
-                fmtPct(n.memPct, digits: 0),
-                present: n.memPct != null,
-                align: TextAlign.right,
-                size: TZ.large,
-                color: TC.forPct(n.memPct),
-                weight: FontWeight.w500,
-              ),
-              align: Alignment.centerRight,
-            ),
-            const SizedBox(width: _Col.pad),
-            cell(
-              _Col.memBar,
-              BarGauge(pct: n.memPct, size: TZ.large),
-              align: Alignment.centerRight,
-            ),
-            const SizedBox(width: _Col.pad),
-            cell(
-              _Col.memText,
-              MaybeText(
-                '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
-                present: n.memTotal != null,
-                size: TZ.large,
-              ),
-            ),
-          ]),
-          const SizedBox(width: _Col.gap),
-          group('root', _Col.rootGroup, [
-            cell(
-              _Col.root,
-              MaybeText(
-                '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
-                present: n.fsSize != null,
-                size: TZ.large,
-                color: TC.mid,
-              ),
-            ),
-          ]),
-          const SizedBox(width: _Col.gap),
-          group('uptime', _Col.uptimeGroup, [
-            cell(
-              _Col.uptime,
-              MaybeText(
-                fmtDuration(n.uptime),
-                present: n.bootTime != null,
-                align: TextAlign.right,
-                size: TZ.body,
-                color: TC.mid,
-              ),
-              align: Alignment.centerRight,
-            ),
-          ]),
           const Spacer(),
         ],
       ),

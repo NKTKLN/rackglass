@@ -15,15 +15,14 @@ import 'util.dart';
 import 'widgets/blink_cursor.dart';
 
 enum AppMode {
-  dash('DASH', 'F1'),
-  graphs('GRAPHS', 'F2'),
-  nodes('NODES', 'F3'),
-  capture('CAPTURE', 'F4');
+  dash('DASH'),
+  graphs('GRAPHS'),
+  nodes('NODES'),
+  capture('CAPTURE');
 
-  const AppMode(this.label, this.key);
+  const AppMode(this.label);
 
   final String label;
-  final String key;
 }
 
 class PromTermApp extends StatefulWidget {
@@ -223,10 +222,7 @@ class _TopBar extends StatelessWidget {
       height: Chrome.top,
       // Bottom padding keeps the buttons clear of the divider rule; without it
       // the two rectangles read as one smudged line.
-      padding: const EdgeInsets.fromLTRB(6, 6, 8, 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: TC.border)),
-      ),
+      padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
       child: Row(
         children: [
           for (final m in AppMode.values)
@@ -259,24 +255,16 @@ class _Tab extends StatelessWidget {
           color: selected ? TC.bright : null,
           border: Border.all(color: selected ? TC.bright : TC.border),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              mode.key,
-              style: ts(size: TZ.caption, color: selected ? TC.bg : TC.dim),
+        child: Center(
+          child: Text(
+            mode.label,
+            style: ts(
+              size: TZ.large,
+              color: selected ? TC.bg : TC.mid,
+              weight: selected ? FontWeight.w700 : FontWeight.w400,
+              letterSpacing: 1.2,
             ),
-            const SizedBox(width: 6),
-            Text(
-              mode.label,
-              style: ts(
-                size: TZ.large,
-                color: selected ? TC.bg : TC.mid,
-                weight: selected ? FontWeight.w700 : FontWeight.w400,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -321,9 +309,6 @@ class _StatusBarState extends State<_StatusBar> {
     return Container(
       height: Chrome.status,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: TC.border)),
-      ),
       child: Row(
         children: [
           const BlinkCursor(size: TZ.small),
