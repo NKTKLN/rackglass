@@ -1,9 +1,27 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/widgets.dart';
 
 import '../capture/capture_controller.dart';
 import '../theme.dart';
 import '../util.dart';
 import '../widgets/term_panel.dart';
+
+/// How the frame is mapped onto the panel.
+enum ZoomMode {
+  /// Whole frame, letterboxed. A 1080p source lands at roughly 0.46x here.
+  fit('FIT'),
+
+  /// One source pixel per panel pixel: a crop you can actually read.
+  native('1:1'),
+
+  /// Twice native, for small text on the source.
+  double_('2:1');
+
+  const ZoomMode(this.label);
+
+  final String label;
+}
 
 /// Live view from the USB capture card.
 ///
@@ -14,6 +32,8 @@ class CaptureScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.active,
+    required this.fullscreen,
+    required this.onFullscreen,
   });
 
   final CaptureController controller;
@@ -21,11 +41,18 @@ class CaptureScreen extends StatefulWidget {
   /// True while CAPTURE is the selected mode.
   final bool active;
 
+  /// True when the app chrome is hidden and the video owns the panel.
+  final bool fullscreen;
+  final ValueChanged<bool> onFullscreen;
+
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
 
 class _CaptureScreenState extends State<CaptureScreen> {
+  final TransformationController _view = TransformationController();
+  ZoomMode _zoom = ZoomMode.fit;
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +65,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     // The screen going away means nobody is watching; leaving ffmpeg and the
     // stats timer running would outlive the widget that started them.
     widget.controller.stop();
+    _view.dispose();
     super.dispose();
   }
 
@@ -51,15 +79,49 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
   }
 
+  /// Zooms about the middle of the viewport, so the thing you were looking at
+  /// stays roughly where it was.
+  void _apply(ZoomMode mode, Size viewport, Size displayed, ui.Image frame) {
+    final scale = switch (mode) {
+      ZoomMode.fit => 1.0,
+      ZoomMode.native => frame.width / displayed.width,
+      ZoomMode.double_ => 2 * frame.width / displayed.width,
+    };
+    final cx = viewport.width / 2;
+    final cy = viewport.height / 2;
+    setState(() {
+      _zoom = mode;
+      _view.value = Matrix4.identity()
+        ..translateByDouble(-cx * (scale - 1), -cy * (scale - 1), 0, 1)
+        ..scaleByDouble(scale, scale, 1, 1);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
         final c = widget.controller;
+        final viewport = _Viewport(
+          controller: c,
+          view: _view,
+          zoom: _zoom,
+          fullscreen: widget.fullscreen,
+          onZoom: _apply,
+          onExitFullscreen: () => widget.onFullscreen(false),
+        );
+
+        if (widget.fullscreen) return viewport;
+
         return Column(
           children: [
-            _ControlBar(controller: c),
+            _ControlBar(
+              controller: c,
+              zoom: _zoom,
+              onZoom: (m) => setState(() => _zoom = m),
+              onFullscreen: () => widget.onFullscreen(true),
+            ),
             const SizedBox(height: 6),
             Expanded(
               child: TermPanel(
@@ -81,7 +143,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   4,
                   4,
                 ),
-                child: _Viewport(controller: c),
+                child: viewport,
               ),
             ),
           ],
@@ -110,9 +172,21 @@ class _StateTag extends StatelessWidget {
 
 /// The picture itself, or an explanation of why there is none.
 class _Viewport extends StatelessWidget {
-  const _Viewport({required this.controller});
+  const _Viewport({
+    required this.controller,
+    required this.view,
+    required this.zoom,
+    required this.fullscreen,
+    required this.onZoom,
+    required this.onExitFullscreen,
+  });
 
   final CaptureController controller;
+  final TransformationController view;
+  final ZoomMode zoom;
+  final bool fullscreen;
+  final void Function(ZoomMode, Size, Size, ui.Image) onZoom;
+  final VoidCallback onExitFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +202,7 @@ class _Viewport extends StatelessWidget {
           if (c.devices.isEmpty)
             'no /dev/video* nodes — is the stick plugged in?'
           else
-            'retrying every ${fmtDuration(const Duration(seconds: 2))}',
+            'retrying every 2s',
         ],
       );
     }
@@ -145,47 +219,119 @@ class _Viewport extends StatelessWidget {
       );
     }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Letterboxed: a 16:9 source on a 1024x600 panel must not be stretched
-        // into whatever aspect the panel happens to have.
-        Center(
-          child: AspectRatio(
-            aspectRatio: frame.width / frame.height,
-            child: RawImage(
-              image: frame,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.low,
+    return LayoutBuilder(
+      builder: (context, box) {
+        final viewport = box.biggest;
+        // Size the frame would take letterboxed into the viewport.
+        final fitted = applyBoxFit(
+          BoxFit.contain,
+          Size(frame.width.toDouble(), frame.height.toDouble()),
+          viewport,
+        ).destination;
+        final nativeScale = frame.width / fitted.width;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRect(
+              child: InteractiveViewer(
+                transformationController: view,
+                minScale: 1,
+                maxScale: 8,
+                // Panning matters more than the pinch: at 1:1 on a 1080p
+                // source only about half the picture is on the panel.
+                panEnabled: true,
+                scaleEnabled: true,
+                child: Center(
+                  child: SizedBox(
+                    width: fitted.width,
+                    height: fitted.height,
+                    child: RawImage(
+                      image: frame,
+                      fit: BoxFit.fill,
+                      // Nearest-neighbour above 1:1 keeps captured text crisp
+                      // instead of smearing it.
+                      filterQuality: FilterQuality.none,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-        if (c.state == CaptureState.noSignal)
-          const Center(
-            child: _Message(
-              title: 'NO SIGNAL',
-              color: TC.amber,
-              lines: [
-                'the card is streaming, the picture is black',
-                'nothing connected to its HDMI input?',
-              ],
+            if (c.state == CaptureState.noSignal)
+              const Center(
+                child: _Message(
+                  title: 'NO SIGNAL',
+                  color: TC.amber,
+                  lines: [
+                    'the card is streaming, the picture is black',
+                    'nothing connected to its HDMI input?',
+                  ],
+                ),
+              ),
+            Positioned(
+              left: 6,
+              bottom: 4,
+              child: _Overlay(controller: controller, nativeScale: nativeScale),
             ),
-          ),
-        Positioned(
-          left: 6,
-          bottom: 4,
-          child: _Overlay(controller: c),
-        ),
-      ],
+            Positioned(
+              right: 6,
+              bottom: 4,
+              child: _ZoomButtons(
+                zoom: zoom,
+                onPick: (m) => onZoom(m, viewport, fitted, frame),
+              ),
+            ),
+            if (fullscreen)
+              Positioned(
+                right: 6,
+                top: 6,
+                child: _Button(
+                  label: 'EXIT FULL',
+                  selected: false,
+                  onTap: onExitFullscreen,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ZoomButtons extends StatelessWidget {
+  const _ZoomButtons({required this.zoom, required this.onPick});
+
+  final ZoomMode zoom;
+  final ValueChanged<ZoomMode> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: TC.bg.withValues(alpha: 0.72),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final m in ZoomMode.values) ...[
+            _Button(
+              label: m.label,
+              selected: m == zoom,
+              onTap: () => onPick(m),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ],
+      ),
     );
   }
 }
 
 /// Frame stats burned into the corner of the picture.
 class _Overlay extends StatelessWidget {
-  const _Overlay({required this.controller});
+  const _Overlay({required this.controller, required this.nativeScale});
 
   final CaptureController controller;
+  final double nativeScale;
 
   @override
   Widget build(BuildContext context) {
@@ -197,8 +343,8 @@ class _Overlay extends StatelessWidget {
       child: Text(
         '${f == null ? "--" : "${f.width}x${f.height}"} · '
         '${c.fps.toStringAsFixed(1)} fps · '
-        '${fmtBytes(c.bytesTotal.toDouble(), digits: 0)} in · '
-        '${c.framesTotal} frames'
+        'fit ${(100 / nativeScale).toStringAsFixed(0)}% · '
+        '${fmtBytes(c.bytesTotal.toDouble(), digits: 0)} in'
         '${c.framesDropped > 0 ? " · ${c.framesDropped} dropped" : ""}'
         '${c.decodeErrors > 0 ? " · ${c.decodeErrors} bad" : ""}',
         style: ts(size: TZ.caption, color: TC.mid),
@@ -253,9 +399,17 @@ class _Message extends StatelessWidget {
 }
 
 class _ControlBar extends StatelessWidget {
-  const _ControlBar({required this.controller});
+  const _ControlBar({
+    required this.controller,
+    required this.zoom,
+    required this.onZoom,
+    required this.onFullscreen,
+  });
 
   final CaptureController controller;
+  final ZoomMode zoom;
+  final ValueChanged<ZoomMode> onZoom;
+  final VoidCallback onFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -269,8 +423,10 @@ class _ControlBar extends StatelessWidget {
             selected: c.running,
             onTap: () => c.running ? c.stop() : c.start(),
           ),
+          const SizedBox(width: 8),
+          _Button(label: 'FULLSCREEN', selected: false, onTap: onFullscreen),
           const SizedBox(width: 12),
-          Text('MODE', style: ts(size: TZ.caption, color: TC.dim)),
+          Text('CAPTURE', style: ts(size: TZ.caption, color: TC.dim)),
           const SizedBox(width: 6),
           for (final m in CaptureController.modes) ...[
             _Button(
@@ -280,10 +436,8 @@ class _ControlBar extends StatelessWidget {
             ),
             const SizedBox(width: 4),
           ],
-          const SizedBox(width: 8),
           if (c.devices.length > 1) ...[
-            Text('DEV', style: ts(size: TZ.caption, color: TC.dim)),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             for (final d in c.devices) ...[
               _Button(
                 label: d.short,

@@ -51,6 +51,10 @@ class _PromTermAppState extends State<PromTermApp> {
   AppMode _mode = AppMode.dash;
   late bool _booted = !widget.showBootSplash;
 
+  /// Capture running with the app chrome hidden. On a 600px panel the bars
+  /// cost 15% of the height, which is worth reclaiming for video.
+  bool _videoFull = false;
+
   // The GRAPHS screen owns expensive range queries, so it is kept alive across
   // tab switches instead of being rebuilt from scratch each time.
   late final Widget _graphs = GraphsScreen(store: _store);
@@ -75,7 +79,12 @@ class _PromTermAppState extends State<PromTermApp> {
   void _handleKey(KeyEvent e) {
     if (e is! KeyDownEvent) return;
     final k = e.logicalKey;
-    void go(AppMode m) => setState(() => _mode = m);
+    void go(AppMode m) => setState(() {
+      _mode = m;
+      // Leaving CAPTURE always brings the chrome back; the child cannot ask
+      // for this itself without calling setState during its own update.
+      if (m != AppMode.capture) _videoFull = false;
+    });
 
     if (k == LogicalKeyboardKey.f1 || k == LogicalKeyboardKey.digit1) {
       go(AppMode.dash);
@@ -94,6 +103,9 @@ class _PromTermAppState extends State<PromTermApp> {
               AppMode.values.length]);
     } else if (k == LogicalKeyboardKey.keyR) {
       _store.refresh();
+    } else if (k == LogicalKeyboardKey.escape && _videoFull) {
+      // Escape leaves fullscreen before it means quit.
+      setState(() => _videoFull = false);
     } else if (k == LogicalKeyboardKey.keyQ ||
         k == LogicalKeyboardKey.escape) {
       SystemNavigator.pop();
@@ -144,6 +156,7 @@ class _PromTermAppState extends State<PromTermApp> {
   }
 
   Widget _screen() {
+    if (_videoFull && _mode == AppMode.capture) return _body();
     return AnimatedBuilder(
       animation: _store,
       builder: (context, _) => Column(
@@ -151,7 +164,10 @@ class _PromTermAppState extends State<PromTermApp> {
           _TopBar(
             store: _store,
             mode: _mode,
-            onPick: (m) => setState(() => _mode = m),
+            onPick: (m) => setState(() {
+              _mode = m;
+              if (m != AppMode.capture) _videoFull = false;
+            }),
           ),
           Expanded(
             child: Padding(
@@ -178,6 +194,8 @@ class _PromTermAppState extends State<PromTermApp> {
         CaptureScreen(
           controller: _capture,
           active: _mode == AppMode.capture,
+          fullscreen: _videoFull,
+          onFullscreen: (v) => setState(() => _videoFull = v),
         ),
       ],
     );
