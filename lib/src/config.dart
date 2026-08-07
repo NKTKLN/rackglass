@@ -54,12 +54,17 @@ class AppConfig {
   static const captureBufferLimit = 8 << 20;
 
   /// How often the frame is sampled to tell a black picture from a live one.
-  static const captureSignalCheck = Duration(milliseconds: 300);
+  static const captureSignalCheck = Duration(milliseconds: 100);
 
-  /// The picture has to stay black this long before the app says so. A fade to
-  /// black, a mode change or one dark frame is not a lost signal, and a banner
-  /// that blinks on every dark scene is worse than no banner.
-  static const captureBlackHold = Duration(seconds: 1);
+  /// How many sampled frames in a row must be black before the app says the
+  /// signal is gone.
+  ///
+  /// Counted in samples rather than elapsed time on purpose: a wall clock says
+  /// "black for a second" even when only one frame was ever looked at and the
+  /// stream then stalled, so a single dark or corrupt frame was enough to raise
+  /// the banner. A streak only advances on evidence, so a stall freezes it
+  /// instead of running it up.
+  static const captureBlackStreak = 10;
 
   /// Mean channel value below which a frame counts as no signal. The stick on
   /// this desk reports a luma average of 7 with nothing on its input.

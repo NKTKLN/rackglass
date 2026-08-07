@@ -115,8 +115,8 @@ class CaptureController extends ChangeNotifier {
   DateTime? _startedAt;
   DateTime? _lastSignalCheck;
 
-  /// When the picture first went black, or null while there is a picture.
-  DateTime? _blackSince;
+  /// Consecutive sampled frames that came back black. Reset by any picture.
+  int _blackStreak = 0;
 
   CaptureState get state => _state;
   String? get error => _error;
@@ -233,7 +233,7 @@ class CaptureController extends ChangeNotifier {
     _decodeErrors = 0;
     _bytesTotal = 0;
     _frameTimes.clear();
-    _blackSince = null;
+    _blackStreak = 0;
     _lastSignalCheck = null;
     _startedAt = DateTime.now();
 
@@ -437,18 +437,17 @@ class CaptureController extends ChangeNotifier {
       if (mean >= AppConfig.captureBlackLevel) {
         // Any picture at all clears it immediately: a source coming back
         // should not make you wait.
-        _blackSince = null;
+        _blackStreak = 0;
         if (_state == CaptureState.noSignal) {
           _setState(CaptureState.streaming);
         }
         return;
       }
-      // Black. Start the clock, and only call it a lost signal once the
-      // picture has stayed black for the whole hold — the last good frame
-      // keeps showing in the meantime.
-      _blackSince ??= now;
+      // Black. Count it, and only call it a lost signal after a run of them —
+      // the last good frame keeps showing in the meantime.
+      _blackStreak++;
       if (_state != CaptureState.noSignal &&
-          now.difference(_blackSince!) >= AppConfig.captureBlackHold) {
+          _blackStreak >= AppConfig.captureBlackStreak) {
         _setState(CaptureState.noSignal);
       }
     } catch (_) {

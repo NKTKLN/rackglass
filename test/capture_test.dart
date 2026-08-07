@@ -73,6 +73,33 @@ void main() {
     expect(fake.controller.state, CaptureState.streaming);
   });
 
+  test('dark frames either side of a stall do not raise the banner', () async {
+    final fake = FakeCapture();
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+
+    // One burst, spaced clear of the sampler's rate limit so it is actually
+    // looked at. Bursts closer together than that are skipped, which would
+    // make this test pass while proving nothing.
+    Future<void> darkSample() async {
+      fake.latest.emit(stream(darkFrame(), 2));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+
+    await feed(fake, litFrame(), 300);
+    await darkSample();
+    await darkSample();
+    // Nothing at all for a while — a stalled stream, not a lost signal.
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    await darkSample();
+    await darkSample();
+
+    // A hold measured on the wall clock called this "black for over a second"
+    // and raised the banner off a handful of frames. A streak counts evidence,
+    // so a stall freezes it instead of running it up.
+    expect(fake.controller.state, isNot(CaptureState.noSignal));
+  });
+
   test('a black picture is reported as no signal once it persists', () async {
     final fake = FakeCapture();
     addTearDown(fake.controller.dispose);
