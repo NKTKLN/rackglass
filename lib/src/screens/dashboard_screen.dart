@@ -423,34 +423,21 @@ class _MemoryPanel extends StatelessWidget {
 /// of detail was costing more attention than it returned.
 abstract final class _Col {
   static const dot = 24.0;
-  static const name = 192.0; // 'vm-amnezia-proxy'
-  static const cpuPct = 64.0; // '10.6%'
-  static const cpuBar = 114.0;
-  static const memText = 132.0; // '14.7G/31.3G'
-  static const memPct = 54.0; // '47%'
-  static const memBar = 114.0;
-  static const rootFree = 92.0; // '58.9G'
-  static const uptime = 74.0; // '2d 2h'
+  static const name = 186.0; // 'vm-amnezia-proxy'
+  static const cpuPct = 62.0; // '10.6%'
+  static const cpuBar = 104.0;
+  static const memText = 128.0; // '14.7G/31.3G'
+  static const memPct = 50.0; // '47%'
+  static const memBar = 104.0;
+  static const root = 128.0; // '13.3G/61.0G'
+  static const uptime = 72.0; // '2d 2h'
 
-  /// Gap either side of a column rule.
-  static const gap = 12.0;
+  /// Gap between column groups. Whitespace does the separating; rules through
+  /// every row turned the table into a grid of boxes.
+  static const gap = 20.0;
 
   /// Breathing room between a reading and the bar that repeats it.
   static const pad = 8.0;
-}
-
-/// Vertical rule between column groups.
-class _VSep extends StatelessWidget {
-  const _VSep();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      margin: const EdgeInsets.symmetric(horizontal: _Col.gap),
-      color: TC.gridLine,
-    );
-  }
 }
 
 class _NodeTable extends StatelessWidget {
@@ -509,18 +496,18 @@ class _TableHeader extends StatelessWidget {
       children: [
         h('', _Col.dot),
         h('INSTANCE', _Col.name),
-        const _VSep(),
+        const SizedBox(width: _Col.gap),
         h('CPU', _Col.cpuPct, a: TextAlign.right),
         const SizedBox(width: _Col.pad),
         h('', _Col.cpuBar),
-        const _VSep(),
+        const SizedBox(width: _Col.gap),
         h('MEMORY', _Col.memText),
         h('', _Col.memPct),
         const SizedBox(width: _Col.pad),
         h('', _Col.memBar),
-        const _VSep(),
-        h('ROOT FREE', _Col.rootFree, a: TextAlign.right),
-        const _VSep(),
+        const SizedBox(width: _Col.gap),
+        h('ROOT', _Col.root),
+        const SizedBox(width: _Col.gap),
         h('UPTIME', _Col.uptime, a: TextAlign.right),
         const Spacer(),
       ],
@@ -565,7 +552,7 @@ class _NodeRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const _VSep(),
+          const SizedBox(width: _Col.gap),
           cell(
             _Col.cpuPct,
             MaybeText(
@@ -584,7 +571,7 @@ class _NodeRow extends StatelessWidget {
             BarGauge(pct: n.cpuPct, size: TZ.large),
             align: Alignment.centerRight,
           ),
-          const _VSep(),
+          const SizedBox(width: _Col.gap),
           cell(
             _Col.memText,
             MaybeText(
@@ -611,19 +598,17 @@ class _NodeRow extends StatelessWidget {
             BarGauge(pct: n.memPct, size: TZ.large),
             align: Alignment.centerRight,
           ),
-          const _VSep(),
+          const SizedBox(width: _Col.gap),
           cell(
-            _Col.rootFree,
+            _Col.root,
             MaybeText(
-              fmtBytes(n.fsAvail),
-              present: n.fsAvail != null,
-              align: TextAlign.right,
+              '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
+              present: n.fsSize != null,
               size: TZ.large,
               color: TC.mid,
             ),
-            align: Alignment.centerRight,
           ),
-          const _VSep(),
+          const SizedBox(width: _Col.gap),
           cell(
             _Col.uptime,
             MaybeText(

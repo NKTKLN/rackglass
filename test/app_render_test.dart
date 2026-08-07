@@ -95,7 +95,7 @@ void main() {
     // Role and core count moved to NODES; the table is one live line per node.
     expect(find.text('ROLE'), findsNothing);
     expect(find.text('CORES'), findsNothing);
-    expect(find.text('ROOT FREE'), findsOneWidget);
+    expect(find.text('ROOT'), findsOneWidget);
 
     // CPU package temperature is picked out of hwmon by label, not sensor id.
     expect(find.text('43.4'), findsOneWidget);
@@ -157,15 +157,7 @@ void main() {
       reason: 'CPU% is not right-aligned with its header',
     );
 
-    // Root free is right-aligned under its header too.
-    expect(
-      tester.getTopRight(find.text('ROOT FREE')).dx,
-      moreOrLessEquals(
-        tester.getTopRight(find.text('47.6G')).dx,
-        epsilon: 0.5,
-      ),
-      reason: 'ROOT FREE is not right-aligned with its header',
-    );
+    sharesLeft(find.text('ROOT'), find.text('13.3G/61.0G'), 'root');
 
     // Nothing in a row may sit on top of anything else in that row.
     final cells = <String, Rect>{
@@ -173,7 +165,7 @@ void main() {
       'cpu': tester.getRect(find.text('10.6%')),
       'mem': tester.getRect(find.text('4.9G/7.7G')),
       'memPct': tester.getRect(find.text('64%')),
-      'rootFree': tester.getRect(find.text('47.6G')),
+      'root': tester.getRect(find.text('13.3G/61.0G')),
     };
     for (final a in cells.entries) {
       for (final b in cells.entries) {
@@ -271,6 +263,6 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('ROOT FREE'), findsOneWidget);
+    expect(find.text('ROOT'), findsOneWidget);
   });
 }
