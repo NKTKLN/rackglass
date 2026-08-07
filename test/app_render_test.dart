@@ -75,7 +75,7 @@ void main() {
 
     // Top bar is mode buttons only; link state and clock sit in the status
     // line at the bottom with the rest of the diagnostics.
-    expect(find.text('[ online ]'), findsOneWidget);
+    expect(find.text('online'), findsOneWidget);
     expect(find.text('DASH'), findsOneWidget);
     expect(find.text('GRAPHS'), findsOneWidget);
     expect(find.text('NODES'), findsOneWidget);
@@ -252,7 +252,7 @@ void main() {
 
     expect(store.snapshot, isNull);
     expect(store.error, isNotNull);
-    expect(find.text('[ offline ]'), findsOneWidget);
+    expect(find.text('offline'), findsOneWidget);
     // The tag says something is wrong; the line beside it says what.
     // Twice: the status line, and the dashboard's own empty state.
     expect(find.textContaining('HTTP 503'), findsNWidgets(2));

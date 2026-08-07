@@ -331,7 +331,7 @@ class _StatusBarState extends State<_StatusBar> {
           _Field(
             label: 'status',
             child: Text(
-              ok ? '[ online ]' : '[ offline ]',
+              ok ? 'online' : 'offline',
               style: ts(
                 size: TZ.small,
                 color: ok ? TC.green : TC.red,
