@@ -3,8 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 
 /// A bordered box with its title cut into the top rule, the way a TUI frame
-/// looks. The title sits over the border with a bit of background behind it so
-/// the line appears to break around the text.
+/// looks. The title sits over the border with background behind it so the line
+/// appears to break around the text.
 class TermPanel extends StatelessWidget {
   const TermPanel({
     super.key,
@@ -13,7 +13,7 @@ class TermPanel extends StatelessWidget {
     this.trailing,
     this.accent = TC.border,
     this.titleColor = TC.mid,
-    this.padding = const EdgeInsets.fromLTRB(8, 10, 8, 6),
+    this.padding = const EdgeInsets.fromLTRB(10, 14, 10, 8),
   });
 
   final String title;
@@ -43,10 +43,14 @@ class TermPanel extends StatelessWidget {
           top: -1,
           child: Container(
             color: TC.bg,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 5),
             child: Text(
               title.toUpperCase(),
-              style: ts(size: 10, color: titleColor, letterSpacing: 1.4),
+              style: ts(
+                size: TZ.caption,
+                color: titleColor,
+                letterSpacing: 1.2,
+              ),
             ),
           ),
         ),
@@ -56,7 +60,7 @@ class TermPanel extends StatelessWidget {
             top: -1,
             child: Container(
               color: TC.bg,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 5),
               child: trailing,
             ),
           ),
@@ -67,7 +71,7 @@ class TermPanel extends StatelessWidget {
 
 /// Horizontal rule used inside panels to separate stanzas.
 class TermRule extends StatelessWidget {
-  const TermRule({super.key, this.color = TC.gridLine, this.height = 8});
+  const TermRule({super.key, this.color = TC.gridLine, this.height = 10});
 
   final Color color;
   final double height;
@@ -83,7 +87,7 @@ class TermRule extends StatelessWidget {
 
 /// `[ TEXT ]` tag, used for status badges.
 class TermTag extends StatelessWidget {
-  const TermTag(this.text, {super.key, this.color = TC.fg, this.size = 10});
+  const TermTag(this.text, {super.key, this.color = TC.fg, this.size = TZ.caption});
 
   final String text;
   final Color color;
@@ -93,7 +97,7 @@ class TermTag extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       '[ $text ]',
-      style: ts(size: size, color: color, weight: FontWeight.w700, glow: 5),
+      style: ts(size: size, color: color, weight: FontWeight.w700),
     );
   }
 }

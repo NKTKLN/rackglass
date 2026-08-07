@@ -9,16 +9,14 @@ class BarGauge extends StatelessWidget {
     super.key,
     required this.pct,
     this.width = 16,
-    this.size = 12,
+    this.size = TZ.body,
     this.color,
-    this.glow = 4,
   });
 
   final double? pct;
   final int width;
   final double size;
   final Color? color;
-  final double glow;
 
   @override
   Widget build(BuildContext context) {
@@ -31,12 +29,13 @@ class BarGauge extends StatelessWidget {
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(text: fill, style: ts(size: size, color: c, glow: glow)),
-          TextSpan(text: track, style: ts(size: size, color: TC.gridLine)),
+          TextSpan(text: fill, style: ts(size: size, color: c)),
+          TextSpan(text: track, style: ts(size: size, color: TC.barTrack)),
         ],
       ),
       maxLines: 1,
       softWrap: false,
+      overflow: TextOverflow.clip,
     );
   }
 }
@@ -47,7 +46,7 @@ class SparkText extends StatelessWidget {
     super.key,
     required this.values,
     this.width = 14,
-    this.size = 12,
+    this.size = TZ.body,
     this.color = TC.dim,
     this.min,
     this.max,
@@ -67,11 +66,13 @@ class SparkText extends StatelessWidget {
       style: ts(size: size, color: color, height: 1.0),
       maxLines: 1,
       softWrap: false,
+      overflow: TextOverflow.clip,
     );
   }
 }
 
-/// Label + value pair on one line, with the label left and value right.
+/// Label on the left, value on the right. The label lives in an [Expanded] and
+/// ellipsizes, so it can never run into the value however long it gets.
 class StatLine extends StatelessWidget {
   const StatLine({
     super.key,
@@ -79,9 +80,8 @@ class StatLine extends StatelessWidget {
     required this.value,
     this.valueColor = TC.bright,
     this.labelColor = TC.dim,
-    this.size = 12,
+    this.size = TZ.small,
     this.trailing,
-    this.glow = 0,
   });
 
   final String label;
@@ -90,22 +90,25 @@ class StatLine extends StatelessWidget {
   final Color labelColor;
   final double size;
   final Widget? trailing;
-  final double glow;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(label, style: ts(size: size, color: labelColor)),
-        const Spacer(),
+        Expanded(
+          child: Text(
+            label,
+            style: ts(size: size, color: labelColor),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
         Text(
           value,
-          style: ts(
-            size: size,
-            color: valueColor,
-            weight: FontWeight.w500,
-            glow: glow,
-          ),
+          style: ts(size: size, color: valueColor, weight: FontWeight.w500),
+          maxLines: 1,
+          softWrap: false,
         ),
         if (trailing != null) ...[const SizedBox(width: 6), trailing!],
       ],
@@ -113,7 +116,8 @@ class StatLine extends StatelessWidget {
   }
 }
 
-/// The one big number in a panel — CPU package temp, GPU temp.
+/// The one big number in a panel. Scales itself down rather than colliding with
+/// whatever sits beside it.
 class BigReading extends StatelessWidget {
   const BigReading({
     super.key,
@@ -121,7 +125,7 @@ class BigReading extends StatelessWidget {
     required this.unit,
     required this.color,
     this.caption,
-    this.size = 38,
+    this.size = TZ.huge,
   });
 
   final String value;
@@ -136,26 +140,35 @@ class BigReading extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value,
-              style: ts(
-                size: size,
-                color: color,
-                weight: FontWeight.w700,
-                glow: 12,
-                height: 1.0,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: ts(
+                  size: size,
+                  color: color,
+                  weight: FontWeight.w700,
+                  height: 1.0,
+                ),
               ),
-            ),
-            const SizedBox(width: 3),
-            Text(unit, style: ts(size: size * 0.42, color: color, glow: 5)),
-          ],
+              const SizedBox(width: 4),
+              Text(unit, style: ts(size: size * 0.45, color: color)),
+            ],
+          ),
         ),
         if (caption != null)
-          Text(caption!, style: ts(size: 10, color: TC.dim)),
+          Text(
+            caption!,
+            style: ts(size: TZ.caption, color: TC.dim),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
       ],
     );
   }
@@ -163,7 +176,7 @@ class BigReading extends StatelessWidget {
 
 /// Small `●`/`○` target-state dot.
 class StateDot extends StatelessWidget {
-  const StateDot(this.up, {super.key, this.size = 12});
+  const StateDot(this.up, {super.key, this.size = TZ.body});
 
   final bool up;
   final double size;
@@ -172,12 +185,7 @@ class StateDot extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       up ? '●' : '○',
-      style: ts(
-        size: size,
-        color: up ? TC.fg : TC.red,
-        glow: up ? 6 : 8,
-        height: 1.0,
-      ),
+      style: ts(size: size, color: up ? TC.green : TC.red, height: 1.0),
     );
   }
 }
@@ -188,7 +196,7 @@ class MaybeText extends StatelessWidget {
     this.text, {
     super.key,
     this.present = true,
-    this.size = 12,
+    this.size = TZ.body,
     this.color = TC.bright,
     this.weight = FontWeight.w400,
     this.align = TextAlign.left,
@@ -208,6 +216,7 @@ class MaybeText extends StatelessWidget {
       textAlign: align,
       maxLines: 1,
       softWrap: false,
+      overflow: TextOverflow.ellipsis,
       style: ts(
         size: size,
         color: present ? color : TC.dim,

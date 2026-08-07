@@ -17,8 +17,11 @@ String barText(double? pct, int width) {
 }
 
 /// Inline sparkline from a value series, scaled to its own min/max.
+///
+/// Under three samples there is no shape to draw yet — a lone block would read
+/// as a spike — so the strip stays an empty dotted track until history builds.
 String sparkText(List<double> values, int width, {double? min, double? max}) {
-  if (values.isEmpty) return '·' * width;
+  if (values.length < 3) return '·' * width;
   final tail = values.length > width
       ? values.sublist(values.length - width)
       : values;
@@ -34,7 +37,9 @@ String sparkText(List<double> values, int width, {double? min, double? max}) {
         return _sparkChars[(n * (_sparkChars.length - 1)).round()];
       })
       .join();
-  return body.padLeft(width, ' ');
+  // Pad with the same dots as the empty state so a short history reads as a
+  // partly-filled track rather than as a floating fragment.
+  return body.padLeft(width, '·');
 }
 
 /// Binary-prefix bytes, fixed to 4 significant-ish chars: `15.1G`, `937M`.

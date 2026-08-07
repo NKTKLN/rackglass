@@ -11,7 +11,7 @@ import 'screens/nodes_screen.dart';
 import 'state/metrics_store.dart';
 import 'theme.dart';
 import 'util.dart';
-import 'widgets/crt.dart';
+import 'widgets/blink_cursor.dart';
 
 enum AppMode {
   dash('DASH', 'F1'),
@@ -41,7 +41,6 @@ class _PromTermAppState extends State<PromTermApp> {
   final FocusNode _focus = FocusNode();
 
   AppMode _mode = AppMode.dash;
-  bool _crt = true;
   late bool _booted = !widget.showBootSplash;
 
   // The GRAPHS screen owns expensive range queries, so it is kept alive across
@@ -86,8 +85,6 @@ class _PromTermAppState extends State<PromTermApp> {
               AppMode.values.length]);
     } else if (k == LogicalKeyboardKey.keyR) {
       _store.refresh();
-    } else if (k == LogicalKeyboardKey.keyC) {
-      setState(() => _crt = !_crt);
     } else if (k == LogicalKeyboardKey.keyQ ||
         k == LogicalKeyboardKey.escape) {
       SystemNavigator.pop();
@@ -122,7 +119,6 @@ class _PromTermAppState extends State<PromTermApp> {
             child: Stack(
               children: [
                 Positioned.fill(child: _screen()),
-                Positioned.fill(child: CrtOverlay(enabled: _crt)),
                 if (!_booted)
                   Positioned.fill(
                     child: BootSplash(
@@ -144,18 +140,14 @@ class _PromTermAppState extends State<PromTermApp> {
       builder: (context, _) => Column(
         children: [
           _HeaderBar(store: _store),
-          _TabBar(
-            mode: _mode,
-            crt: _crt,
-            onPick: (m) => setState(() => _mode = m),
-          ),
+          _TabBar(mode: _mode, onPick: (m) => setState(() => _mode = m)),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
               child: _body(),
             ),
           ),
-          _StatusBar(store: _store, mode: _mode),
+          _StatusBar(store: _store),
         ],
       ),
     );
@@ -179,6 +171,13 @@ class _PromTermAppState extends State<PromTermApp> {
 
 // ---------------------------------------------------------------------------
 
+/// Fixed heights for the frame around the content, in design pixels.
+abstract final class Chrome {
+  static const header = 34.0;
+  static const tabs = 42.0;
+  static const status = 26.0;
+}
+
 class _HeaderBar extends StatefulWidget {
   const _HeaderBar({required this.store});
 
@@ -189,20 +188,20 @@ class _HeaderBar extends StatefulWidget {
 }
 
 class _HeaderBarState extends State<_HeaderBar> {
-  late final Timer _clock = Timer.periodic(
-    const Duration(seconds: 1),
-    (_) => setState(() {}),
-  );
+  Timer? _clock;
 
   @override
   void initState() {
     super.initState();
-    _clock; // start it
+    _clock = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => setState(() {}),
+    );
   }
 
   @override
   void dispose() {
-    _clock.cancel();
+    _clock?.cancel();
     super.dispose();
   }
 
@@ -211,7 +210,7 @@ class _HeaderBarState extends State<_HeaderBar> {
     final s = widget.store;
     final ok = s.healthy;
     return Container(
-      height: 30,
+      height: Chrome.header,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: TC.border)),
@@ -221,37 +220,38 @@ class _HeaderBarState extends State<_HeaderBar> {
           Text(
             'PROMTERM',
             style: ts(
-              size: 15,
-              color: TC.fg,
+              size: TZ.title,
+              color: TC.bright,
               weight: FontWeight.w700,
-              letterSpacing: 3,
-              glow: 9,
+              letterSpacing: 2,
             ),
           ),
           const SizedBox(width: 10),
-          Text('│', style: ts(size: 13, color: TC.border)),
+          Text('│', style: ts(size: TZ.large, color: TC.border)),
           const SizedBox(width: 10),
-          Text(
-            s.endpoint.replaceFirst(RegExp(r'^https?://'), ''),
-            style: ts(size: 11, color: TC.mid),
+          Expanded(
+            child: Text(
+              s.endpoint.replaceFirst(RegExp(r'^https?://'), ''),
+              style: ts(size: TZ.small, color: TC.mid),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 10),
           Text(
             ok ? '● ONLINE' : '● ${(s.error ?? "OFFLINE").toUpperCase()}',
             style: ts(
-              size: 11,
-              color: ok ? TC.fg : TC.red,
+              size: TZ.small,
+              color: ok ? TC.green : TC.red,
               weight: FontWeight.w700,
-              glow: 6,
             ),
+            maxLines: 1,
+            softWrap: false,
           ),
           const SizedBox(width: 12),
-          Text('│', style: ts(size: 13, color: TC.border)),
+          Text('│', style: ts(size: TZ.large, color: TC.border)),
           const SizedBox(width: 12),
-          Text(
-            fmtDate(DateTime.now()),
-            style: ts(size: 12, color: TC.bright),
-          ),
+          Text(fmtDate(DateTime.now()), style: ts(color: TC.bright)),
         ],
       ),
     );
@@ -259,16 +259,15 @@ class _HeaderBarState extends State<_HeaderBar> {
 }
 
 class _TabBar extends StatelessWidget {
-  const _TabBar({required this.mode, required this.crt, required this.onPick});
+  const _TabBar({required this.mode, required this.onPick});
 
   final AppMode mode;
-  final bool crt;
   final ValueChanged<AppMode> onPick;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 34,
+      height: Chrome.tabs,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: TC.border)),
@@ -277,11 +276,6 @@ class _TabBar extends StatelessWidget {
         children: [
           for (final m in AppMode.values)
             _Tab(mode: m, selected: m == mode, onTap: () => onPick(m)),
-          const Spacer(),
-          Text(
-            crt ? 'CRT ON  [c]' : 'CRT OFF [c]',
-            style: ts(size: 10, color: crt ? TC.mid : TC.dim),
-          ),
         ],
       ),
     );
@@ -302,29 +296,32 @@ class _Tab extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Container(
         // Wide enough to be a comfortable touch target on a 7" panel.
-        constraints: const BoxConstraints(minWidth: 132),
-        margin: const EdgeInsets.only(right: 4, top: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        constraints: const BoxConstraints(minWidth: 150),
+        margin: const EdgeInsets.only(right: 5, top: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? TC.fg.withValues(alpha: 0.13) : null,
-          border: Border.all(color: selected ? TC.borderLit : TC.border),
+          // Selected tab is inverted, the way a console highlight looks.
+          color: selected ? TC.bright : null,
+          border: Border.all(color: selected ? TC.bright : TC.border),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               mode.key,
-              style: ts(size: 9, color: selected ? TC.fg : TC.dim),
+              style: ts(
+                size: TZ.caption,
+                color: selected ? TC.bg : TC.dim,
+              ),
             ),
             const SizedBox(width: 6),
             Text(
               mode.label,
               style: ts(
-                size: 13,
-                color: selected ? TC.bright : TC.mid,
+                size: TZ.large,
+                color: selected ? TC.bg : TC.mid,
                 weight: selected ? FontWeight.w700 : FontWeight.w400,
-                letterSpacing: 1.6,
-                glow: selected ? 7 : 0,
+                letterSpacing: 1.2,
               ),
             ),
           ],
@@ -335,44 +332,53 @@ class _Tab extends StatelessWidget {
 }
 
 class _StatusBar extends StatelessWidget {
-  const _StatusBar({required this.store, required this.mode});
+  const _StatusBar({required this.store});
 
   final MetricsStore store;
-  final AppMode mode;
 
   @override
   Widget build(BuildContext context) {
     final snap = store.snapshot;
     final err = store.error;
     return Container(
-      height: 22,
+      height: Chrome.status,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: TC.border)),
       ),
       child: Row(
         children: [
-          const BlinkCursor(size: 11),
+          const BlinkCursor(size: TZ.small),
           const SizedBox(width: 6),
-          if (err != null)
-            Text(
-              'SCRAPE FAILED ($err) · ${store.consecutiveErrors} in a row'
-              '${store.lastSuccess != null ? " · last ok ${fmtClock(store.lastSuccess!)}" : ""}',
-              style: ts(size: 10, color: TC.red),
-            )
-          else if (snap != null)
-            Text(
-              '${snap.nodes.length} node targets · ${snap.targetsDown} down · '
-              '${snap.gpus.length} gpu · poll ${snap.fetchMillis}ms · '
-              'updated ${fmtClock(snap.at)}',
-              style: ts(size: 10, color: TC.mid),
-            )
-          else
-            Text('waiting for first scrape…', style: ts(size: 10, color: TC.dim)),
-          const Spacer(),
+          Expanded(
+            child: err != null
+                ? Text(
+                    'SCRAPE FAILED ($err) · ${store.consecutiveErrors} in a row'
+                    '${store.lastSuccess != null ? " · last ok ${fmtClock(store.lastSuccess!)}" : ""}',
+                    style: ts(size: TZ.caption, color: TC.red),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : snap != null
+                ? Text(
+                    '${snap.nodes.length} node targets · ${snap.targetsDown} down · '
+                    '${snap.gpus.length} gpu · poll ${snap.fetchMillis}ms · '
+                    'updated ${fmtClock(snap.at)}',
+                    style: ts(size: TZ.caption, color: TC.mid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : Text(
+                    'waiting for first scrape…',
+                    style: ts(size: TZ.caption, color: TC.dim),
+                  ),
+          ),
+          const SizedBox(width: 10),
           Text(
-            '1-4/F1-F4 mode  ·  ←→ cycle  ·  r refresh  ·  c crt  ·  q quit',
-            style: ts(size: 10, color: TC.dim),
+            '1-4 mode · ←→ cycle · r refresh · q quit',
+            style: ts(size: TZ.caption, color: TC.dim),
+            maxLines: 1,
+            softWrap: false,
           ),
         ],
       ),
@@ -436,7 +442,7 @@ class _BootSplashState extends State<BootSplash> {
       behavior: HitTestBehavior.opaque,
       child: Container(
         color: TC.bg,
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(30),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -444,27 +450,25 @@ class _BootSplashState extends State<BootSplash> {
             Text(
               'PROMTERM',
               style: ts(
-                size: 46,
-                color: TC.fg,
+                size: 48,
+                color: TC.bright,
                 weight: FontWeight.w700,
-                letterSpacing: 14,
-                glow: 18,
+                letterSpacing: 12,
               ),
             ),
-            const SizedBox(height: 6),
-            Container(width: 520, height: 1, color: TC.border),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Container(width: 560, height: 1, color: TC.border),
+            const SizedBox(height: 18),
             for (var i = 0; i < _shown; i++)
               Padding(
-                padding: const EdgeInsets.only(bottom: 3),
+                padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
                   children: [
-                    Text('>', style: ts(size: 13, color: TC.dim)),
+                    Text('>', style: ts(color: TC.dim)),
                     const SizedBox(width: 8),
                     Text(
                       _script[i],
                       style: ts(
-                        size: 13,
                         color: i == _script.length - 1 ? TC.bright : TC.mid,
                       ),
                     ),
@@ -472,9 +476,9 @@ class _BootSplashState extends State<BootSplash> {
                 ),
               ),
             const SizedBox(height: 4),
-            const BlinkCursor(size: 14),
+            const BlinkCursor(size: TZ.large),
             const Spacer(),
-            Text('tap to skip', style: ts(size: 10, color: TC.gridLine)),
+            Text('tap to skip', style: ts(size: TZ.caption, color: TC.dim)),
           ],
         ),
       ),

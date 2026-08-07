@@ -267,10 +267,18 @@ class FakePrometheus {
         ],
       };
     }
+    // Honour an `instance="…"` selector the way the real server does, so the
+    // NODES detail chart gets one series per metric rather than the whole
+    // cluster.
+    final pinned = RegExp(r'instance="([^"]+)"').firstMatch(q)?.group(1);
+    final wanted = pinned == null
+        ? _nodes.entries
+        : _nodes.entries.where((e) => e.key == pinned);
+
     return {
       'resultType': 'matrix',
       'result': [
-        for (final e in _nodes.entries)
+        for (final e in wanted)
           {
             'metric': {'instance': e.key, 'role': e.value},
             'values': pts(_cpu[e.key]! + 10),

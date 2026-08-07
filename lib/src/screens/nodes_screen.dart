@@ -1,10 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 import '../model/snapshot.dart';
+import '../prom/queries.dart';
 import '../state/metrics_store.dart';
 import '../theme.dart';
 import '../util.dart';
 import '../widgets/gauges.dart';
+import '../widgets/term_chart.dart';
 import '../widgets/term_panel.dart';
 
 /// Master/detail view: pick a target on the left, read everything about it on
@@ -19,13 +21,50 @@ class NodesScreen extends StatefulWidget {
 }
 
 class _NodesScreenState extends State<NodesScreen> {
+  static const _historyWindow = Duration(hours: 1);
+
   String? _selected;
+
+  /// Range-loaded history for whichever target is showing.
+  String? _historyFor;
+  List<ChartSeries> _history = const [];
+  bool _historyLoading = false;
+
+  Future<void> _loadHistory(String instance) async {
+    if (_historyFor == instance) return;
+    _historyFor = instance;
+    setState(() {
+      _historyLoading = true;
+      _history = const [];
+    });
+    try {
+      final r = await Future.wait([
+        widget.store.loadRange(Q.cpuFor(instance), _historyWindow),
+        widget.store.loadRange(Q.memPctFor(instance), _historyWindow),
+      ]);
+      if (!mounted || _historyFor != instance) return;
+      setState(() {
+        _history = [
+          // The chart appends its own unit, so the labels carry none.
+          for (final s in r[0]) ChartSeries('cpu', s.points, TC.fg),
+          for (final s in r[1]) ChartSeries('memory', s.points, TC.cyan),
+        ];
+        _historyLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || _historyFor != instance) return;
+      setState(() {
+        _history = const [];
+        _historyLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final snap = widget.store.snapshot;
     if (snap == null) {
-      return Center(child: Text('NO DATA', style: ts(size: 13, color: TC.dim)));
+      return Center(child: Text('NO DATA', style: ts(size: TZ.large, color: TC.dim)));
     }
     final nodes = snap.nodes;
     // Fall back to the first target whenever the selection disappears.
@@ -33,11 +72,18 @@ class _NodesScreenState extends State<NodesScreen> {
       (n) => n.instance == _selected,
       orElse: () => nodes.first,
     );
+    // The default selection is only known once the first snapshot has landed,
+    // so the fetch is kicked off after this frame rather than in initState.
+    if (_historyFor != selected.instance) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _loadHistory(selected.instance),
+      );
+    }
 
     return Row(
       children: [
         SizedBox(
-          width: 246,
+          width: 262,
           child: TermPanel(
             title: 'targets',
             padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
@@ -56,12 +102,12 @@ class _NodesScreenState extends State<NodesScreen> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Row(
                       children: [
-                        StateDot(!g.stale, size: 11),
+                        StateDot(!g.stale, size: TZ.small),
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(
                             'gpu${g.gpu} ${g.modelShort}',
-                            style: ts(size: 10, color: TC.mid),
+                            style: ts(size: TZ.caption, color: TC.mid),
                             maxLines: 1,
                             softWrap: false,
                           ),
@@ -74,7 +120,16 @@ class _NodesScreenState extends State<NodesScreen> {
           ),
         ),
         const SizedBox(width: 6),
-        Expanded(child: _Detail(node: selected, snap: snap, store: widget.store)),
+        Expanded(
+          child: _Detail(
+            node: selected,
+            snap: snap,
+            store: widget.store,
+            history: _history,
+            historyLoading: _historyLoading,
+            historyWindow: _historyWindow,
+          ),
+        ),
       ],
     );
   }
@@ -100,19 +155,19 @@ class _TargetTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 3),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? TC.fg.withValues(alpha: 0.10) : null,
+          color: selected ? TC.bright : null,
           border: Border.all(
-            color: selected ? TC.borderLit : const Color(0x00000000),
+            color: selected ? TC.bright : const Color(0x00000000),
           ),
         ),
         child: Row(
           children: [
             Text(
               selected ? '▸' : ' ',
-              style: ts(size: 12, color: TC.fg, glow: 5),
+              style: ts(color: selected ? TC.bg : TC.dim),
             ),
             const SizedBox(width: 4),
-            StateDot(node.up, size: 11),
+            StateDot(node.up, size: TZ.small),
             const SizedBox(width: 6),
             Expanded(
               child: Column(
@@ -121,25 +176,32 @@ class _TargetTile extends StatelessWidget {
                   Text(
                     node.instance,
                     style: ts(
-                      size: 12,
                       color: node.up
-                          ? (selected ? TC.bright : TC.fg)
+                          ? (selected ? TC.bg : TC.fg)
                           : TC.red,
                       weight: selected ? FontWeight.w700 : FontWeight.w400,
                     ),
                     maxLines: 1,
-                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     node.isHypervisor ? 'hypervisor' : node.role,
-                    style: ts(size: 9, color: TC.dim),
+                    style: ts(
+                      size: TZ.caption,
+                      color: selected ? TC.gridLine : TC.dim,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
             Text(
               fmtPct(node.cpuPct, digits: 0),
-              style: ts(size: 11, color: TC.forPct(node.cpuPct)),
+              style: ts(
+                size: TZ.small,
+                color: selected ? TC.bg : TC.forPct(node.cpuPct),
+              ),
             ),
           ],
         ),
@@ -149,11 +211,21 @@ class _TargetTile extends StatelessWidget {
 }
 
 class _Detail extends StatelessWidget {
-  const _Detail({required this.node, required this.snap, required this.store});
+  const _Detail({
+    required this.node,
+    required this.snap,
+    required this.store,
+    required this.history,
+    required this.historyLoading,
+    required this.historyWindow,
+  });
 
   final NodeStat node;
   final Snapshot snap;
   final MetricsStore store;
+  final List<ChartSeries> history;
+  final bool historyLoading;
+  final Duration historyWindow;
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +234,7 @@ class _Detail extends StatelessWidget {
 
     return TermPanel(
       title: '${n.instance} · ${n.role}',
-      trailing: TermTag(n.up ? 'UP' : 'DOWN', color: n.up ? TC.fg : TC.red),
+      trailing: TermTag(n.up ? 'UP' : 'DOWN', color: n.up ? TC.green : TC.red),
       padding: const EdgeInsets.fromLTRB(10, 14, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,25 +308,25 @@ class _Detail extends StatelessWidget {
                   children: [
                     Text(
                       'NETWORK',
-                      style: ts(size: 10, color: TC.dim, letterSpacing: 1.4),
+                      style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: 4),
                     StatLine(
                       label: 'receive',
                       value: fmtRate(n.netRx),
                       valueColor: TC.cyan,
-                      size: 12,
+                      size: TZ.body,
                     ),
                     StatLine(
                       label: 'transmit',
                       value: fmtRate(n.netTx),
                       valueColor: TC.cyan,
-                      size: 12,
+                      size: TZ.body,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'BOOT',
-                      style: ts(size: 10, color: TC.dim, letterSpacing: 1.4),
+                      style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: 4),
                     StatLine(
@@ -266,12 +338,12 @@ class _Detail extends StatelessWidget {
                                 (n.bootTime! * 1000).round(),
                               ),
                             ),
-                      size: 12,
+                      size: TZ.body,
                     ),
                     StatLine(
                       label: 'uptime',
                       value: fmtDuration(n.uptime),
-                      size: 12,
+                      size: TZ.body,
                     ),
                   ],
                 ),
@@ -284,13 +356,13 @@ class _Detail extends StatelessWidget {
                   children: [
                     Text(
                       'HWMON SENSORS',
-                      style: ts(size: 10, color: TC.dim, letterSpacing: 1.4),
+                      style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: 4),
                     if (sensors.isEmpty)
                       Text(
                         'none exported by this target',
-                        style: ts(size: 11, color: TC.dim),
+                        style: ts(size: TZ.small, color: TC.dim),
                       )
                     else
                       for (final t in sensors)
@@ -299,19 +371,18 @@ class _Detail extends StatelessWidget {
                           child: Row(
                             children: [
                               SizedBox(
-                                width: 70,
+                                width: 82,
                                 child: Text(
                                   t.label,
-                                  style: ts(size: 11, color: TC.mid),
+                                  style: ts(size: TZ.body, color: TC.mid),
                                 ),
                               ),
                               SizedBox(
-                                width: 62,
+                                width: 74,
                                 child: Text(
                                   fmtTemp(t.celsius),
                                   textAlign: TextAlign.right,
                                   style: ts(
-                                    size: 12,
                                     color: TC.forTemp(t.celsius),
                                     weight: FontWeight.w500,
                                   ),
@@ -322,15 +393,14 @@ class _Detail extends StatelessWidget {
                               // compares sensors without reading the numbers.
                               BarGauge(
                                 pct: t.celsius,
-                                width: 18,
-                                size: 11,
+                                width: 14,
                                 color: TC.forTemp(t.celsius),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   t.chipShort,
-                                  style: ts(size: 9, color: TC.gridLine),
+                                  style: ts(size: TZ.caption, color: TC.dim),
                                   maxLines: 1,
                                   softWrap: false,
                                 ),
@@ -343,11 +413,39 @@ class _Detail extends StatelessWidget {
               ),
             ],
           ),
+          const TermRule(height: 12),
+          Row(
+            children: [
+              Text(
+                'LAST ${_windowLabel(historyWindow)}',
+                style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2),
+              ),
+              const Spacer(),
+              if (historyLoading)
+                Text('LOADING…', style: ts(size: TZ.caption, color: TC.amber)),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Expanded(
+            child: TermChart(
+              series: history,
+              window: historyWindow,
+              unit: '%',
+              yMin: 0,
+              emptyMessage: node.up
+                  ? 'NO HISTORY FOR ${node.instance.toUpperCase()}'
+                  : 'TARGET DOWN · NO HISTORY',
+            ),
+          ),
         ],
       ),
     );
   }
 }
+
+/// Compact window label: `1H`, `30M` — `fmtDuration` would say `1h 0m`.
+String _windowLabel(Duration d) =>
+    d.inMinutes % 60 == 0 ? '${d.inHours}H' : '${d.inMinutes}M';
 
 class _MetricBlock extends StatelessWidget {
   const _MetricBlock({
@@ -371,27 +469,26 @@ class _MetricBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(caption, style: ts(size: 10, color: TC.dim, letterSpacing: 1.4)),
+        Text(caption, style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2)),
         const SizedBox(height: 2),
         Text(
           big,
           style: ts(
-            size: 26,
+            size: 30,
             color: color,
             weight: FontWeight.w700,
-            glow: 10,
             height: 1.1,
           ),
         ),
         const SizedBox(height: 2),
-        BarGauge(pct: pct, width: 22, size: 11, color: color),
+        BarGauge(pct: pct, width: 20, color: color),
         if (spark.isNotEmpty) ...[
           const SizedBox(height: 2),
-          SparkText(values: spark, width: 22, size: 11, color: TC.dim, min: 0),
+          SparkText(values: spark, width: 20, color: TC.dim, min: 0),
         ],
         const SizedBox(height: 6),
         for (final (k, v) in lines)
-          StatLine(label: k, value: v, size: 11),
+          StatLine(label: k, value: v, size: TZ.small),
       ],
     );
   }

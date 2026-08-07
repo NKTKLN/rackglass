@@ -25,7 +25,7 @@ class CaptureScreen extends StatelessWidget {
     return TermPanel(
       title: 'capture · usb',
       trailing: const TermTag('NOT IMPLEMENTED', color: TC.amber),
-      accent: TC.amber.withValues(alpha: 0.35),
+      accent: TC.amber,
       titleColor: TC.amber,
       child: Center(
         child: Column(
@@ -35,27 +35,25 @@ class CaptureScreen extends StatelessWidget {
               Text(
                 line,
                 style: ts(
-                  size: 13,
+                  size: TZ.large,
                   color: TC.dim,
                   height: 1.15,
-                  letterSpacing: 0,
                 ),
               ),
             const SizedBox(height: 22),
             Text(
               'USB CAPTURE CARD INPUT',
               style: ts(
-                size: 15,
+                size: 22,
                 color: TC.amber,
                 weight: FontWeight.w700,
                 letterSpacing: 3,
-                glow: 8,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'reserved · no device bound',
-              style: ts(size: 11, color: TC.dim, letterSpacing: 1.2),
+              style: ts(size: TZ.body, color: TC.dim, letterSpacing: 1.2),
             ),
             const SizedBox(height: 18),
             Container(
@@ -66,12 +64,12 @@ class CaptureScreen extends StatelessWidget {
                 children: [
                   Text(
                     '\$ v4l2-ctl --list-devices',
-                    style: ts(size: 11, color: TC.mid),
+                    style: ts(size: TZ.body, color: TC.mid),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'capture pipeline not wired up yet',
-                    style: ts(size: 11, color: TC.dim),
+                    style: ts(size: TZ.small, color: TC.dim),
                   ),
                 ],
               ),

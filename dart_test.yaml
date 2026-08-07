@@ -1,0 +1,6 @@
+# Declared so the runner does not warn about unknown tags. Both suites gate
+# themselves on a --dart-define instead of a tag skip, so a plain
+# `flutter test` stays hermetic.
+tags:
+  live:
+  preview:

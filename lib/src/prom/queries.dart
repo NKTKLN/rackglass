@@ -76,4 +76,22 @@ abstract final class Q {
   static const rangeNetRx = netRx;
   static const rangeNetTx = netTx;
   static const rangeLoad = 'node_load1';
+
+  /// Per-instance history for the NODES detail chart. The instance name comes
+  /// from Prometheus' own `instance` label, so it needs no escaping beyond
+  /// quoting, but quote characters are stripped anyway to keep the expression
+  /// well-formed whatever the label contains.
+  static String cpuFor(String instance) {
+    final i = _safe(instance);
+    return '100 - (avg by (instance) '
+        '(rate(node_cpu_seconds_total{instance="$i",mode="idle"}[2m])) * 100)';
+  }
+
+  static String memPctFor(String instance) {
+    final i = _safe(instance);
+    return '(1 - (node_memory_MemAvailable_bytes{instance="$i"} / '
+        'node_memory_MemTotal_bytes{instance="$i"})) * 100';
+  }
+
+  static String _safe(String s) => s.replaceAll(RegExp(r'["\\\n]'), '');
 }

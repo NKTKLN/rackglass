@@ -113,9 +113,66 @@ void main() {
     expect(find.textContaining('LAST SEEN'), findsOneWidget);
     expect(find.textContaining('1d 22h'), findsOneWidget);
     expect(
-      find.textContaining('dcgm-exporter on vm-gpu-worker-1 unreachable'),
+      find.textContaining('vm-gpu-worker-1 exporter unreachable'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('table cells line up under their headers and never overlap', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    // A column header and the cell beneath it must share an edge, or the table
+    // reads as scrambled even though nothing overflows.
+    void sharesLeft(Finder header, Finder cell, String what) {
+      expect(
+        tester.getTopLeft(header).dx,
+        moreOrLessEquals(tester.getTopLeft(cell).dx, epsilon: 0.5),
+        reason: '$what is not left-aligned with its header',
+      );
+    }
+
+    sharesLeft(find.text('INSTANCE'), find.text('pve-host'), 'instance');
+    sharesLeft(find.text('ROLE'), find.text('hypervisor'), 'role');
+    // 'MEMORY' is also the memory panel's title; the table header is the later
+    // of the two in tree order.
+    sharesLeft(
+      find.text('MEMORY').last,
+      find.text('14.7G/31.3G'),
+      'memory',
+    );
+
+    // Right-aligned columns share their right edge instead. '9.2%' is also the
+    // host CPU panel's reading, so again take the later one.
+    expect(
+      tester.getTopRight(find.text('CPU%')).dx,
+      moreOrLessEquals(
+        tester.getTopRight(find.text('9.2%').last).dx,
+        epsilon: 0.5,
+      ),
+      reason: 'CPU% is not right-aligned with its header',
+    );
+
+    // Nothing in a row may sit on top of anything else in that row.
+    final cells = <String, Rect>{
+      'name': tester.getRect(find.text('pve-host')),
+      'role': tester.getRect(find.text('hypervisor')),
+      'cpu': tester.getRect(find.text('9.2%').last),
+      'mem': tester.getRect(find.text('14.7G/31.3G')),
+      'memPct': tester.getRect(find.text('47%')),
+      'cores': tester.getRect(find.text('12')),
+    };
+    for (final a in cells.entries) {
+      for (final b in cells.entries) {
+        if (a.key == b.key) continue;
+        expect(
+          a.value.overlaps(b.value),
+          isFalse,
+          reason: '${a.key} overlaps ${b.key}',
+        );
+      }
+    }
   });
 
   testWidgets('a live GPU exporter shows current values', (tester) async {
@@ -124,7 +181,7 @@ void main() {
     expect(find.text('[ LIVE ]'), findsOneWidget);
     expect(find.text('[ DOWN ]'), findsNothing);
     // 9216 MiB used of 9216+7154 MiB total.
-    expect(find.textContaining('9.0G / 16.0G'), findsOneWidget);
+    expect(find.textContaining('9.0G of 16.0G'), findsOneWidget);
     expect(find.textContaining('212 W'), findsOneWidget);
   });
 
@@ -145,9 +202,10 @@ void main() {
     await tester.tap(find.text('GRAPHS'));
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('CPU USAGE %'), findsOneWidget);
+    expect(find.text('UTILISATION %'), findsOneWidget);
     expect(find.text('TEMPERATURE °C'), findsOneWidget);
     expect(find.text('MEMORY USED %'), findsOneWidget);
+    expect(find.text('NETWORK RX · KB/S'), findsOneWidget);
     expect(find.text('NO DATA IN RANGE'), findsNothing);
 
     // Switching the window re-queries at a coarser step.

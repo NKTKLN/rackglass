@@ -1,7 +1,8 @@
 # promterm
 
-Terminal-style Prometheus dashboard for a 7" 1024x600 panel. Phosphor green,
-box-drawing frames, block-character bars, optional CRT scanlines.
+Terminal-style Prometheus dashboard for a 7" 1024x600 panel. Plain Linux
+console look: black background, grey-white text, box-drawing frames,
+block-character bars. No phosphor tint, no glow, no scanlines.
 
 Built against the live setup at `http://192.168.1.13:9090`: a Proxmox host
 (`pve-host`, 12 cores / 32 GiB) with four guests plus a Tesla V100 behind
@@ -16,9 +17,17 @@ dcgm-exporter.
 | `3` / `F3` | **NODES** | Master/detail per target: CPU, memory, root fs, network, boot time, full hwmon sensor list |
 | `4` / `F4` | **CAPTURE** | Reserved stub for the USB capture card — no device bound yet |
 
-Other keys: `←` `→` cycle modes, `r` force a refresh, `c` toggle the CRT
-overlay, `q` / `Esc` quit. Every tab and button is also a touch target sized for
-a finger on a 7" screen.
+Other keys: `←` `→` cycle modes, `r` force a refresh, `q` / `Esc` quit. Every
+tab and button is also a touch target sized for a finger on a 7" screen.
+
+## Typography
+
+The panel is roughly 170 DPI and gets read at arm's length, so nothing is set
+below 13px and body text is 16px — a real console on this screen runs an 8x16
+font, and that is the floor the scale in `theme.dart` is built around. Because
+the type is large, screen density is a real constraint: panels carry a metric
+per line rather than a stacked label-and-bar, and anything that did not fit
+moved to NODES.
 
 ## Running
 
@@ -54,6 +63,11 @@ sudo dnf install -y clang cmake ninja-build gtk3-devel
 Everything is laid out against a fixed 1024x600 canvas and then scaled with a
 `FittedBox`. The panel is pixel-perfect, larger windows get a proportionally
 larger copy, and no arrangement of data can push a widget off screen.
+
+Table columns are declared once as constants shared by the header and the rows,
+and a test asserts they still share an edge and that no two cells in a row
+overlap — misalignment is the failure mode that looks broken without ever
+triggering an overflow error.
 
 ## Handling missing data
 
@@ -97,6 +111,6 @@ lib/src/
   prom/queries.dart        every PromQL expression, in one place
   model/snapshot.dart      NodeStat / GpuStat / Snapshot
   state/metrics_store.dart polling, history rings, range passthrough
-  widgets/                 panel frame, gauges, chart painter, CRT overlay
+  widgets/                 panel frame, gauges, chart painter, cursor
   screens/                 dash, graphs, nodes, capture
 ```

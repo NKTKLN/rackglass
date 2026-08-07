@@ -123,10 +123,20 @@ class _GraphsScreenState extends State<GraphsScreen> {
                   children: [
                     Expanded(
                       child: TermPanel(
-                        title: 'cpu usage %',
+                        title: 'utilisation %',
                         padding: const EdgeInsets.fromLTRB(6, 12, 8, 4),
                         child: TermChart(
-                          series: _byInstance(_cpu),
+                          // GPU util belongs here rather than next to a byte
+                          // rate: everything on this axis is a percentage.
+                          series: [
+                            ..._byInstance(_cpu),
+                            for (final s in _gpuUtil)
+                              ChartSeries(
+                                'gpu${s.labels["gpu"] ?? "0"}',
+                                s.points,
+                                TC.amber,
+                              ),
+                          ],
                           window: _window,
                           unit: '%',
                           yMin: 0,
@@ -181,21 +191,16 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     const SizedBox(height: 6),
                     Expanded(
                       child: TermPanel(
-                        title: 'gpu util % · net rx',
+                        title: 'network rx · kb/s',
                         padding: const EdgeInsets.fromLTRB(6, 12, 8, 4),
                         child: TermChart(
+                          // Its own panel and its own axis: a few KB/s would be
+                          // a flat line at zero if it shared one with a 0-100
+                          // percentage.
                           series: [
-                            for (final s in _gpuUtil)
-                              ChartSeries(
-                                'gpu${s.labels["gpu"] ?? "0"} util',
-                                s.points,
-                                TC.amber,
-                              ),
-                            // Network is scaled to KB/s so it shares the axis
-                            // with a 0-100 utilisation line legibly.
                             for (final s in _netRx)
                               ChartSeries(
-                                '${s.instance} rx KB/s',
+                                s.instance ?? '?',
                                 [
                                   for (final p in s.points)
                                     PromPoint(p.t, p.v / 1024),
@@ -204,6 +209,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
                               ),
                           ],
                           window: _window,
+                          unit: 'K',
                           yMin: 0,
                         ),
                       ),
@@ -239,10 +245,10 @@ class _WindowBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 26,
+      height: 30,
       child: Row(
         children: [
-          Text('RANGE', style: ts(size: 10, color: TC.dim, letterSpacing: 1.4)),
+          Text('RANGE', style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2)),
           const SizedBox(width: 8),
           for (var i = 0; i < _windows.length; i++) ...[
             _PickButton(
@@ -255,22 +261,23 @@ class _WindowBar extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             'step ${fmtDuration(step)}',
-            style: ts(size: 10, color: TC.dim),
+            style: ts(size: TZ.caption, color: TC.dim),
           ),
           const Spacer(),
           if (error != null)
             Text(
               'RANGE QUERY FAILED: $error',
-              style: ts(size: 10, color: TC.red),
+              style: ts(size: TZ.caption, color: TC.red),
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             )
           else
             Text(
               loading ? 'LOADING…' : 'OK',
-              style: ts(size: 10, color: loading ? TC.amber : TC.dim),
+              style: ts(size: TZ.caption, color: loading ? TC.amber : TC.dim),
             ),
           const SizedBox(width: 8),
-          _PickButton(label: 'RELOAD ⟳', selected: false, onTap: onReload),
+          _PickButton(label: 'RELOAD', selected: false, onTap: onReload),
         ],
       ),
     );
@@ -295,18 +302,17 @@ class _PickButton extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Container(
         // Generous padding: this is driven by a finger on a 7" panel.
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          border: Border.all(color: selected ? TC.borderLit : TC.border),
-          color: selected ? TC.fg.withValues(alpha: 0.12) : null,
+          border: Border.all(color: selected ? TC.bright : TC.border),
+          color: selected ? TC.bright : null,
         ),
         child: Text(
           label,
           style: ts(
-            size: 11,
-            color: selected ? TC.bright : TC.mid,
+            size: TZ.small,
+            color: selected ? TC.bg : TC.mid,
             weight: selected ? FontWeight.w700 : FontWeight.w400,
-            glow: selected ? 5 : 0,
           ),
         ),
       ),

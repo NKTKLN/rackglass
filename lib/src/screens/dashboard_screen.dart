@@ -8,9 +8,12 @@ import '../widgets/gauges.dart';
 import '../widgets/term_panel.dart';
 
 /// The at-a-glance screen: host CPU/thermals, GPU, memory budget, and one row
-/// per VM with CPU and memory side by side.
+/// per scrape target with CPU and memory side by side.
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, required this.store});
+
+  /// Height budget for the top row of panels. The node table takes the rest.
+  static const _panelRow = 182.0;
 
   final MetricsStore store;
 
@@ -21,7 +24,10 @@ class DashboardScreen extends StatelessWidget {
       return Center(
         child: Text(
           store.error == null ? 'CONNECTING…' : 'NO DATA · ${store.error}',
-          style: ts(size: 13, color: store.error == null ? TC.dim : TC.red),
+          style: ts(
+            size: TZ.large,
+            color: store.error == null ? TC.dim : TC.red,
+          ),
         ),
       );
     }
@@ -29,12 +35,12 @@ class DashboardScreen extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          height: 166,
+          height: _panelRow,
           child: Row(
             children: [
-              SizedBox(width: 320, child: _CpuPanel(snap: snap, store: store)),
+              SizedBox(width: 322, child: _CpuPanel(snap: snap, store: store)),
               const SizedBox(width: 6),
-              SizedBox(width: 340, child: _GpuPanel(snap: snap, store: store)),
+              SizedBox(width: 344, child: _GpuPanel(snap: snap)),
               const SizedBox(width: 6),
               Expanded(child: _MemoryPanel(snap: snap)),
             ],
@@ -65,78 +71,92 @@ class _CpuPanel extends StatelessWidget {
 
     return TermPanel(
       title: 'cpu · ${host?.instance ?? "host"}',
-      accent: TC.border,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BigReading(
-                value: pkg == null ? '--' : pkg.celsius.toStringAsFixed(1),
-                unit: '°C',
-                color: tempColor,
-                caption: pkg?.label ?? 'no sensor',
+              Expanded(
+                child: BigReading(
+                  value: pkg == null ? '--' : pkg.celsius.toStringAsFixed(1),
+                  unit: '°C',
+                  color: tempColor,
+                  caption: pkg?.label ?? 'no sensor',
+                ),
               ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (final t in snap.otherHostTemps.take(3))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 1),
-                      child: Text(
-                        '${t.label.padRight(6)} ${fmtTemp(t.celsius, digits: 0).padLeft(6)}',
-                        style: ts(size: 10, color: TC.forTemp(t.celsius)),
+              const SizedBox(width: 8),
+              // Fixed width, so a wide reading shrinks itself instead of
+              // colliding with the sensor list.
+              SizedBox(
+                width: 104,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (final t in snap.otherHostTemps.take(2))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          '${t.label} ${fmtTemp(t.celsius, digits: 0)}',
+                          style: ts(
+                            size: TZ.small,
+                            color: TC.forTemp(t.celsius),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
-          const TermRule(height: 10),
+          const TermRule(),
           StatLine(
             label: 'USAGE',
             value: fmtPct(host?.cpuPct),
             valueColor: TC.forPct(host?.cpuPct),
-            glow: 6,
+            size: TZ.body,
           ),
-          const SizedBox(height: 2),
-          BarGauge(pct: host?.cpuPct, width: 34, size: 11),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
+          BarGauge(pct: host?.cpuPct, width: 30, size: TZ.body),
+          const SizedBox(height: 5),
           Row(
             children: [
-              Text(
-                'LOAD ${fmtNum(host?.load1)} ${fmtNum(host?.load5)} ${fmtNum(host?.load15)}',
-                style: ts(size: 10, color: TC.mid),
+              Expanded(
+                child: Text(
+                  'LOAD ${fmtNum(host?.load1)} ${fmtNum(host?.load5)} ${fmtNum(host?.load15)}',
+                  style: ts(size: TZ.small, color: TC.mid),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
               Text(
                 '${host?.cores?.toStringAsFixed(0) ?? "--"} CORES',
-                style: ts(size: 10, color: TC.dim),
+                style: ts(size: TZ.small, color: TC.dim),
               ),
             ],
           ),
           const Spacer(),
           Row(
             children: [
-              Text('TEMP', style: ts(size: 9, color: TC.dim)),
-              const SizedBox(width: 4),
+              Text('TEMP', style: ts(size: TZ.caption, color: TC.dim)),
+              const SizedBox(width: 5),
               Expanded(
                 child: SparkText(
                   values: store.hostTempHistory,
-                  width: 22,
-                  size: 11,
-                  color: tempColor.withValues(alpha: 0.75),
+                  width: 18,
+                  size: TZ.body,
+                  color: tempColor,
                 ),
               ),
               const SizedBox(width: 6),
-              Text('CPU', style: ts(size: 9, color: TC.dim)),
-              const SizedBox(width: 4),
+              Text('CPU', style: ts(size: TZ.caption, color: TC.dim)),
+              const SizedBox(width: 5),
               SparkText(
                 values: store.cpuHistory(host?.instance ?? ''),
-                width: 14,
-                size: 11,
+                width: 12,
+                size: TZ.body,
                 color: TC.mid,
                 min: 0,
               ),
@@ -153,10 +173,9 @@ class _CpuPanel extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _GpuPanel extends StatelessWidget {
-  const _GpuPanel({required this.snap, required this.store});
+  const _GpuPanel({required this.snap});
 
   final Snapshot snap;
-  final MetricsStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -166,26 +185,24 @@ class _GpuPanel extends StatelessWidget {
         child: Center(
           child: Text(
             'NO GPU SERIES IN TSDB',
-            style: ts(size: 11, color: TC.dim, letterSpacing: 1.4),
+            style: ts(size: TZ.small, color: TC.dim, letterSpacing: 1.2),
           ),
         ),
       );
     }
     final g = snap.gpus.first;
     final stale = g.stale;
-    // Stale readings are drawn dim and amber so they can never be mistaken for
-    // a live idle GPU; the badge says exactly how old they are.
-    final tempColor = stale
-        ? TC.amber.withValues(alpha: 0.75)
-        : TC.forTemp(g.temp, warn: 80, crit: 90);
+    // Stale readings are drawn dim so they can never be mistaken for a live
+    // idle GPU; the badge says exactly how old they are.
+    final tempColor = stale ? TC.dim : TC.forTemp(g.temp, warn: 80, crit: 90);
 
     return TermPanel(
       title: 'gpu · ${g.modelShort}',
-      accent: stale ? TC.amber.withValues(alpha: 0.45) : TC.border,
+      accent: stale ? TC.amber : TC.border,
       titleColor: stale ? TC.amber : TC.mid,
       trailing: TermTag(
         stale ? 'DOWN' : 'LIVE',
-        color: stale ? TC.red : TC.fg,
+        color: stale ? TC.red : TC.green,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,88 +210,131 @@ class _GpuPanel extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BigReading(
-                value: g.temp == null ? '--' : g.temp!.toStringAsFixed(0),
-                unit: '°C',
-                color: tempColor,
-                caption: stale
-                    ? 'LAST SEEN ${fmtDuration(g.age)} AGO'
-                    : 'core · mem ${fmtTemp(g.memTemp, digits: 0)}',
+              Expanded(
+                child: BigReading(
+                  value: g.temp == null ? '--' : g.temp!.toStringAsFixed(0),
+                  unit: '°C',
+                  size: 34,
+                  color: tempColor,
+                  caption: stale
+                      ? 'LAST SEEN ${fmtDuration(g.age)} AGO'
+                      : 'core · mem ${fmtTemp(g.memTemp, digits: 0)}',
+                ),
               ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${fmtNum(g.powerWatts, digits: 0)} W',
-                    style: ts(size: 11, color: stale ? TC.dim : TC.bright),
-                  ),
-                  Text(
-                    'SM ${fmtNum(g.smClockMhz, digits: 0)}MHz',
-                    style: ts(size: 9, color: TC.dim),
-                  ),
-                  Text(
-                    'MEM ${fmtNum(g.memClockMhz, digits: 0)}MHz',
-                    style: ts(size: 9, color: TC.dim),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 118,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${fmtNum(g.powerWatts, digits: 0)} W',
+                      style: ts(
+                        size: TZ.body,
+                        color: stale ? TC.dim : TC.bright,
+                      ),
+                    ),
+                    Text(
+                      'SM ${fmtNum(g.smClockMhz, digits: 0)}MHz',
+                      style: ts(size: TZ.caption, color: TC.dim),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'MEM ${fmtNum(g.memClockMhz, digits: 0)}MHz',
+                      style: ts(size: TZ.caption, color: TC.dim),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const TermRule(height: 10),
-          StatLine(
+          const TermRule(height: 8),
+          // Label, bar and value on one line each: this panel carries more
+          // readings than its neighbours and has no room for stacked rows.
+          _InlineBar(
             label: 'UTIL',
-            value: fmtPct(g.util, digits: 0),
-            valueColor: stale ? TC.dim : TC.forPct(g.util),
-          ),
-          const SizedBox(height: 2),
-          BarGauge(
             pct: g.util,
-            width: 36,
-            size: 11,
-            color: stale ? TC.dim : null,
+            value: fmtPct(g.util, digits: 0),
+            dimmed: stale,
           ),
           const SizedBox(height: 4),
-          StatLine(
+          _InlineBar(
             label: 'VRAM',
-            value:
-                '${fmtBytes(g.fbUsedBytes)} / ${fmtBytes(g.fbTotalBytes)}  ${fmtPct(g.fbPct, digits: 0)}',
-            valueColor: stale ? TC.dim : TC.bright,
-            size: 11,
+            pct: g.fbPct,
+            value: fmtPct(g.fbPct, digits: 0),
+            dimmed: stale,
           ),
           const SizedBox(height: 2),
-          BarGauge(
-            pct: g.fbPct,
-            width: 36,
-            size: 11,
-            color: stale ? TC.dim : null,
+          Text(
+            '${fmtBytes(g.fbUsedBytes)} of ${fmtBytes(g.fbTotalBytes)} used',
+            style: ts(
+              size: TZ.small,
+              color: stale ? TC.dim : TC.mid,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
           if (stale)
             Text(
-              '! dcgm-exporter on ${g.instance} unreachable',
-              style: ts(size: 9, color: TC.red),
+              '! ${g.instance} exporter unreachable',
+              style: ts(size: TZ.caption, color: TC.red),
               maxLines: 1,
-            )
-          else
-            Row(
-              children: [
-                Text('UTIL', style: ts(size: 9, color: TC.dim)),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: SparkText(
-                    values: store.gpuUtilHistory,
-                    width: 20,
-                    size: 11,
-                    color: TC.mid,
-                    min: 0,
-                    max: 100,
-                  ),
-                ),
-              ],
+              overflow: TextOverflow.ellipsis,
             ),
         ],
       ),
+    );
+  }
+}
+
+/// `LABEL ██████░░░░  42%` on a single line.
+class _InlineBar extends StatelessWidget {
+  const _InlineBar({
+    required this.label,
+    required this.pct,
+    required this.value,
+    this.dimmed = false,
+  });
+
+  final String label;
+  final double? pct;
+  final String value;
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 48,
+          child: Text(label, style: ts(size: TZ.small, color: TC.dim)),
+        ),
+        Expanded(
+          child: BarGauge(
+            pct: pct,
+            width: 22,
+            size: TZ.body,
+            color: dimmed ? TC.dim : null,
+          ),
+        ),
+        SizedBox(
+          width: 48,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: ts(
+              color: dimmed ? TC.dim : TC.forPct(pct),
+              weight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -306,35 +366,32 @@ class _MemoryPanel extends StatelessWidget {
             unit: '/ ${fmtBytes(total)}',
             color: TC.forPct(host?.memPct),
             caption: 'HOST RAM IN USE · ${fmtPct(host?.memPct, digits: 0)}',
-            size: 26,
+            size: 30,
           ),
           const SizedBox(height: 4),
-          BarGauge(pct: host?.memPct, width: 34, size: 11),
+          BarGauge(pct: host?.memPct, width: 30, size: TZ.body),
           const TermRule(height: 8),
           StatLine(
             label: 'SWAP',
-            value:
-                '${fmtBytes(host?.swapUsed)} / ${fmtBytes(host?.swapTotal)}',
+            value: '${fmtBytes(host?.swapUsed)} / ${fmtBytes(host?.swapTotal)}',
             valueColor: TC.forPct(host?.swapPct),
-            size: 11,
+            size: TZ.body,
           ),
-          const SizedBox(height: 2),
-          BarGauge(pct: host?.swapPct, width: 34, size: 11),
-          const SizedBox(height: 3),
           StatLine(
-            label: 'VM ALLOCATED (${snap.vms.length} vm)',
-            value: fmtBytes(snap.vmMemAllocated),
+            // The overcommit ratio matters more than a second bar would, and
+            // costs one line instead of three.
+            label: 'VM ALLOCATED (${snap.vms.length})',
+            value:
+                '${fmtBytes(snap.vmMemAllocated)} · ${fmtPct(allocPct, digits: 0)}',
             valueColor: TC.cyan,
-            size: 11,
+            size: TZ.body,
           ),
           StatLine(
             label: 'VM IN USE',
             value: fmtBytes(snap.vmMemUsed),
             valueColor: TC.cyan,
-            size: 11,
+            size: TZ.body,
           ),
-          const SizedBox(height: 2),
-          BarGauge(pct: allocPct, width: 34, size: 11, color: TC.cyan),
         ],
       ),
     );
@@ -346,20 +403,21 @@ class _MemoryPanel extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// Column widths, in design pixels. Kept as constants so the header and the
-/// rows can never drift apart.
+/// rows can never drift apart, and sized off the widest real value each column
+/// has to hold at [TZ.body] (0.6em advance).
 abstract final class _Col {
-  static const dot = 16.0;
-  static const name = 152.0;
-  static const role = 88.0;
-  static const cpuPct = 50.0;
-  static const cpuBar = 88.0;
-  static const cpuSpark = 66.0;
-  static const memText = 116.0;
-  static const memPct = 42.0;
-  static const memBar = 88.0;
-  static const memSpark = 66.0;
-  static const cores = 52.0;
-  static const uptime = 76.0;
+  static const dot = 20.0;
+  static const name = 162.0; // 'vm-amnezia-proxy'
+  static const role = 100.0; // 'gpu-workers'
+  static const cpuPct = 56.0; // '10.6%'
+  static const cpuBar = 92.0; // 10 cells
+  static const cpuSpark = 74.0; // 8 cells
+  static const memText = 116.0; // '14.7G/31.3G'
+  static const memPct = 46.0; // '47%'
+  static const memBar = 92.0;
+  static const memSpark = 74.0;
+  static const cores = 46.0;
+  static const uptime = 62.0; // '2d 2h'
 }
 
 class _NodeTable extends StatelessWidget {
@@ -375,7 +433,7 @@ class _NodeTable extends StatelessWidget {
       trailing: snap.targetsDown > 0
           ? TermTag('${snap.targetsDown} DOWN', color: TC.red)
           : null,
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -405,11 +463,13 @@ class _TableHeader extends StatelessWidget {
       child: Text(
         t,
         textAlign: a,
-        style: ts(size: 9, color: TC.dim, letterSpacing: 1.1),
+        style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
       ),
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
           h('', _Col.dot),
@@ -421,7 +481,7 @@ class _TableHeader extends StatelessWidget {
           h('', _Col.cpuSpark),
           const SizedBox(width: 6),
           h('MEMORY', _Col.memText),
-          h('', _Col.memPct, a: TextAlign.right),
+          h('', _Col.memPct),
           const SizedBox(width: 6),
           h('', _Col.memBar),
           h('', _Col.memSpark),
@@ -443,14 +503,11 @@ class _NodeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final n = node;
-    final nameColor = n.up
-        ? (n.isHypervisor ? TC.cyan : TC.bright)
-        : TC.red;
+    final nameColor = n.up ? (n.isHypervisor ? TC.cyan : TC.bright) : TC.red;
 
     return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: TC.gridLine.withValues(alpha: 0.6))),
-        color: n.isHypervisor ? TC.cyan.withValues(alpha: 0.035) : null,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: TC.gridLine)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -458,19 +515,30 @@ class _NodeRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              SizedBox(width: _Col.dot, child: StateDot(n.up, size: 11)),
+              SizedBox(
+                width: _Col.dot,
+                child: StateDot(n.up, size: TZ.small),
+              ),
               SizedBox(
                 width: _Col.name,
                 child: Text(
                   n.instance,
-                  style: ts(size: 13, color: nameColor, weight: FontWeight.w500),
+                  style: ts(
+                    color: nameColor,
+                    weight: FontWeight.w500,
+                  ),
                   maxLines: 1,
-                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               SizedBox(
                 width: _Col.role,
-                child: Text(n.role, style: ts(size: 11, color: TC.dim)),
+                child: Text(
+                  n.role,
+                  style: ts(size: TZ.small, color: TC.dim),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               SizedBox(
                 width: _Col.cpuPct,
@@ -478,7 +546,6 @@ class _NodeRow extends StatelessWidget {
                   fmtPct(n.cpuPct),
                   present: n.cpuPct != null,
                   align: TextAlign.right,
-                  size: 12,
                   color: TC.forPct(n.cpuPct),
                   weight: FontWeight.w500,
                 ),
@@ -486,14 +553,13 @@ class _NodeRow extends StatelessWidget {
               const SizedBox(width: 6),
               SizedBox(
                 width: _Col.cpuBar,
-                child: BarGauge(pct: n.cpuPct, width: 12, size: 11),
+                child: BarGauge(pct: n.cpuPct, width: 10),
               ),
               SizedBox(
                 width: _Col.cpuSpark,
                 child: SparkText(
                   values: store.cpuHistory(n.instance),
-                  width: 9,
-                  size: 11,
+                  width: 8,
                   color: TC.dim,
                   min: 0,
                 ),
@@ -504,7 +570,6 @@ class _NodeRow extends StatelessWidget {
                 child: MaybeText(
                   '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
                   present: n.memTotal != null,
-                  size: 12,
                 ),
               ),
               SizedBox(
@@ -513,7 +578,6 @@ class _NodeRow extends StatelessWidget {
                   fmtPct(n.memPct, digits: 0),
                   present: n.memPct != null,
                   align: TextAlign.right,
-                  size: 12,
                   color: TC.forPct(n.memPct),
                   weight: FontWeight.w500,
                 ),
@@ -521,14 +585,13 @@ class _NodeRow extends StatelessWidget {
               const SizedBox(width: 6),
               SizedBox(
                 width: _Col.memBar,
-                child: BarGauge(pct: n.memPct, width: 12, size: 11),
+                child: BarGauge(pct: n.memPct, width: 10),
               ),
               SizedBox(
                 width: _Col.memSpark,
                 child: SparkText(
                   values: store.memHistory(n.instance),
-                  width: 9,
-                  size: 11,
+                  width: 8,
                   color: TC.dim,
                 ),
               ),
@@ -539,7 +602,6 @@ class _NodeRow extends StatelessWidget {
                   n.cores?.toStringAsFixed(0) ?? '--',
                   present: n.cores != null,
                   align: TextAlign.right,
-                  size: 12,
                   color: TC.mid,
                 ),
               ),
@@ -549,7 +611,7 @@ class _NodeRow extends StatelessWidget {
                   fmtDuration(n.uptime),
                   present: n.bootTime != null,
                   align: TextAlign.right,
-                  size: 11,
+                  size: TZ.small,
                   color: TC.mid,
                 ),
               ),
@@ -562,10 +624,10 @@ class _NodeRow extends StatelessWidget {
               'load ${fmtNum(n.load1)}/${fmtNum(n.load5)}/${fmtNum(n.load15)}'
               '   ·   / ${fmtBytes(n.fsUsed)} of ${fmtBytes(n.fsSize)} (${fmtPct(n.fsPct, digits: 0)})'
               '   ·   net ↓${fmtRate(n.netRx)} ↑${fmtRate(n.netTx)}'
-              '   ·   iowait ${fmtPct(n.ioWaitPct, digits: 1)}',
-              style: ts(size: 10, color: TC.dim),
+              '   ·   iowait ${fmtPct(n.ioWaitPct)}',
+              style: ts(size: TZ.small, color: TC.dim),
               maxLines: 1,
-              softWrap: false,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

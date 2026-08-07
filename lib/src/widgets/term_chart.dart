@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
@@ -16,8 +15,8 @@ class ChartSeries {
   final Color color;
 }
 
-/// Time-series line chart drawn on a dotted terminal grid: dashed gridlines,
-/// axis ticks in the phosphor palette, and a filled area under each line.
+/// Time-series line chart on a dashed console grid: flat 1px lines, a faint
+/// area fill, and axis ticks in the console palette.
 class TermChart extends StatelessWidget {
   const TermChart({
     super.key,
@@ -47,7 +46,7 @@ class TermChart extends StatelessWidget {
       return Center(
         child: Text(
           emptyMessage,
-          style: ts(size: 11, color: TC.dim, letterSpacing: 1.5),
+          style: ts(size: TZ.small, color: TC.dim, letterSpacing: 1.5),
         ),
       );
     }
@@ -83,7 +82,7 @@ class _Legend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 14,
+      height: 18,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
@@ -93,13 +92,13 @@ class _Legend extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 10),
                 child: Row(
                   children: [
-                    Text('─', style: ts(size: 11, color: s.color, glow: 5)),
+                    Text('─', style: ts(size: TZ.body, color: s.color)),
                     const SizedBox(width: 3),
-                    Text(s.label, style: ts(size: 10, color: TC.mid)),
+                    Text(s.label, style: ts(size: TZ.caption, color: TC.mid)),
                     const SizedBox(width: 4),
                     Text(
                       '${fmtNum(s.points.last.v, digits: 1)}$unit',
-                      style: ts(size: 10, color: TC.bright),
+                      style: ts(size: TZ.caption, color: TC.bright),
                     ),
                   ],
                 ),
@@ -127,14 +126,17 @@ class _ChartPainter extends CustomPainter {
   final double? forcedMax;
   final int yTicks;
 
-  static const _leftGutter = 46.0;
-  static const _bottomGutter = 14.0;
+  static const _leftGutter = 54.0;
+  static const _topGutter = 10.0;
+  static const _bottomGutter = 18.0;
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The top tick label is centred on plot.top, so leave half a line of room
+    // above it or it gets clipped by the panel edge.
     final plot = Rect.fromLTRB(
       _leftGutter,
-      4,
+      _topGutter,
       size.width - 4,
       size.height - _bottomGutter,
     );
@@ -255,28 +257,19 @@ class _ChartPainter extends CustomPainter {
 
     canvas.save();
     canvas.clipRect(plot);
-    canvas.drawPath(area, Paint()..color = s.color.withValues(alpha: 0.10));
+    canvas.drawPath(area, Paint()..color = s.color.withValues(alpha: 0.09));
     canvas.drawPath(
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..strokeJoin = StrokeJoin.round
-        ..color = s.color
-        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 2),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
+        ..strokeWidth = 1.6
         ..strokeJoin = StrokeJoin.round
         ..color = s.color,
     );
     canvas.restore();
 
     // Head marker on the most recent sample.
-    canvas.drawCircle(last, 2.2, Paint()..color = s.color);
+    canvas.drawCircle(last, 2.4, Paint()..color = s.color);
   }
 
   void _dashedLine(Canvas canvas, Offset a, Offset b, Paint paint) {
@@ -294,7 +287,7 @@ class _ChartPainter extends CustomPainter {
 
   void _label(Canvas canvas, String text, Offset at, {required _Align align}) {
     final tp = TextPainter(
-      text: TextSpan(text: text, style: ts(size: 9, color: TC.dim)),
+      text: TextSpan(text: text, style: ts(size: TZ.caption, color: TC.dim)),
       textDirection: TextDirection.ltr,
     )..layout();
     final o = switch (align) {
