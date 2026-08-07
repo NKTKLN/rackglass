@@ -501,9 +501,9 @@ class _TableHeader extends StatelessWidget {
         const SizedBox(width: _Col.pad),
         h('', _Col.cpuBar),
         const SizedBox(width: _Col.gap),
-        h('', _Col.memBar),
-        const SizedBox(width: _Col.pad),
         h('', _Col.memPct),
+        const SizedBox(width: _Col.pad),
+        h('', _Col.memBar),
         const SizedBox(width: _Col.pad),
         h('MEMORY', _Col.memText),
         const SizedBox(width: _Col.gap),
@@ -574,12 +574,6 @@ class _NodeRow extends StatelessWidget {
           ),
           const SizedBox(width: _Col.gap),
           cell(
-            _Col.memBar,
-            BarGauge(pct: n.memPct, size: TZ.large),
-            align: Alignment.centerRight,
-          ),
-          const SizedBox(width: _Col.pad),
-          cell(
             _Col.memPct,
             MaybeText(
               fmtPct(n.memPct, digits: 0),
@@ -589,6 +583,12 @@ class _NodeRow extends StatelessWidget {
               color: TC.forPct(n.memPct),
               weight: FontWeight.w500,
             ),
+            align: Alignment.centerRight,
+          ),
+          const SizedBox(width: _Col.pad),
+          cell(
+            _Col.memBar,
+            BarGauge(pct: n.memPct, size: TZ.large),
             align: Alignment.centerRight,
           ),
           const SizedBox(width: _Col.pad),
