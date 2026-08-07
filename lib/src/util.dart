@@ -95,7 +95,12 @@ String fmtDuration(Duration? d) {
 
 String two(int v) => v.toString().padLeft(2, '0');
 
-String fmtClock(DateTime t) => '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
+/// 12-hour wall clock: `6:05:52 PM`. Seconds stay in because a ticking clock
+/// is the cheapest proof on the panel that the app has not frozen.
+String fmtClock(DateTime t) {
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  return '$h:${two(t.minute)}:${two(t.second)} ${t.hour < 12 ? "AM" : "PM"}';
+}
 
 String fmtDate(DateTime t) =>
     '${t.year}-${two(t.month)}-${two(t.day)} ${fmtClock(t)}';

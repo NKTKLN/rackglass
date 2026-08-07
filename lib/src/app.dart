@@ -246,9 +246,10 @@ class _TopBarState extends State<_TopBar> {
             softWrap: false,
           ),
           const SizedBox(width: 14),
+          // Time only: the date never changes while you are looking at it.
           Text(
-            fmtDate(DateTime.now()),
-            style: ts(size: TZ.large, color: TC.bright),
+            fmtClock(DateTime.now()),
+            style: ts(size: TZ.title, color: TC.bright),
           ),
         ],
       ),

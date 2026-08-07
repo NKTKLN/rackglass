@@ -71,6 +71,12 @@ class _CpuPanel extends StatelessWidget {
 
     return TermPanel(
       title: 'cpu · ${host?.instance ?? "host"}',
+      // The hypervisor no longer has a row in the table below, so this is the
+      // only place its target going down can show up.
+      trailing: host != null && !host.up
+          ? const TermTag('DOWN', color: TC.red)
+          : null,
+      accent: host != null && !host.up ? TC.red : TC.border,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -207,10 +213,9 @@ class _GpuPanel extends StatelessWidget {
       title: 'gpu · ${g.modelShort}',
       accent: stale ? TC.amber : TC.border,
       titleColor: stale ? TC.amber : TC.mid,
-      trailing: TermTag(
-        stale ? 'DOWN' : 'LIVE',
-        color: stale ? TC.red : TC.green,
-      ),
+      // Only the bad state gets a badge. A healthy GPU is the default, and
+      // labelling it says nothing you could act on.
+      trailing: stale ? const TermTag('DOWN', color: TC.red) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -411,20 +416,41 @@ class _MemoryPanel extends StatelessWidget {
 
 /// Column widths, in design pixels. Kept as constants so the header and the
 /// rows can never drift apart, and sized off the widest real value each column
-/// has to hold at [TZ.body] (0.6em advance).
+/// has to hold at [TZ.large] (0.6em advance).
+///
+/// One line per node: the live reading only. Role and core count are static
+/// facts that belong on NODES, history has its own screen, and the second line
+/// of detail was costing more attention than it returned.
 abstract final class _Col {
-  static const dot = 20.0;
-  static const name = 162.0; // 'vm-amnezia-proxy'
-  static const role = 100.0; // 'gpu-workers'
-  static const cpuPct = 56.0; // '10.6%'
-  static const cpuBar = 92.0; // 10 cells
-  static const cpuSpark = 74.0; // 8 cells
-  static const memText = 116.0; // '14.7G/31.3G'
-  static const memPct = 46.0; // '47%'
-  static const memBar = 92.0;
-  static const memSpark = 74.0;
-  static const cores = 46.0;
-  static const uptime = 62.0; // '2d 2h'
+  static const dot = 24.0;
+  static const name = 192.0; // 'vm-amnezia-proxy'
+  static const cpuPct = 64.0; // '10.6%'
+  static const cpuBar = 114.0;
+  static const memText = 132.0; // '14.7G/31.3G'
+  static const memPct = 54.0; // '47%'
+  static const memBar = 114.0;
+  static const rootFree = 92.0; // '58.9G'
+  static const uptime = 74.0; // '2d 2h'
+
+  /// Gap either side of a column rule.
+  static const gap = 12.0;
+
+  /// Breathing room between a reading and the bar that repeats it.
+  static const pad = 8.0;
+}
+
+/// Vertical rule between column groups.
+class _VSep extends StatelessWidget {
+  const _VSep();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      margin: const EdgeInsets.symmetric(horizontal: _Col.gap),
+      color: TC.gridLine,
+    );
+  }
 }
 
 class _NodeTable extends StatelessWidget {
@@ -435,21 +461,24 @@ class _NodeTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Guests only. The hypervisor is the whole top row of this screen, so a
+    // row repeating it would be the same numbers twice.
+    final guests = snap.vms;
+    final down = guests.where((n) => !n.up).length;
+
     return TermPanel(
-      title: 'nodes · ${snap.nodes.length} targets',
-      trailing: snap.targetsDown > 0
-          ? TermTag('${snap.targetsDown} DOWN', color: TC.red)
-          : null,
+      title: 'guests · ${guests.length}',
+      trailing: down > 0 ? TermTag('$down DOWN', color: TC.red) : null,
       padding: const EdgeInsets.fromLTRB(8, TermPanel.titleGutter, 8, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _TableHeader(),
+          const SizedBox(height: 22, child: _TableHeader()),
           Container(height: 1, color: TC.gridLine),
           Expanded(
             child: Column(
               children: [
-                for (final n in snap.nodes)
+                for (final n in guests)
                   Expanded(child: _NodeRow(node: n, store: store)),
               ],
             ),
@@ -475,28 +504,26 @@ class _TableHeader extends StatelessWidget {
         overflow: TextOverflow.clip,
       ),
     );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          h('', _Col.dot),
-          h('INSTANCE', _Col.name),
-          h('ROLE', _Col.role),
-          h('CPU%', _Col.cpuPct, a: TextAlign.right),
-          const SizedBox(width: 6),
-          h('', _Col.cpuBar),
-          h('', _Col.cpuSpark),
-          const SizedBox(width: 6),
-          h('MEMORY', _Col.memText),
-          h('', _Col.memPct),
-          const SizedBox(width: 6),
-          h('', _Col.memBar),
-          h('', _Col.memSpark),
-          const Spacer(),
-          h('CORES', _Col.cores, a: TextAlign.right),
-          h('UPTIME', _Col.uptime, a: TextAlign.right),
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        h('', _Col.dot),
+        h('INSTANCE', _Col.name),
+        const _VSep(),
+        h('CPU', _Col.cpuPct, a: TextAlign.right),
+        const SizedBox(width: _Col.pad),
+        h('', _Col.cpuBar),
+        const _VSep(),
+        h('MEMORY', _Col.memText),
+        h('', _Col.memPct),
+        const SizedBox(width: _Col.pad),
+        h('', _Col.memBar),
+        const _VSep(),
+        h('ROOT FREE', _Col.rootFree, a: TextAlign.right),
+        const _VSep(),
+        h('UPTIME', _Col.uptime, a: TextAlign.right),
+        const Spacer(),
+      ],
     );
   }
 }
@@ -512,128 +539,103 @@ class _NodeRow extends StatelessWidget {
     final n = node;
     final nameColor = n.up ? (n.isHypervisor ? TC.cyan : TC.bright) : TC.red;
 
+    // Cells are stretched so the column rules run the full height of the row;
+    // each one aligns its own content vertically.
+    Widget cell(double width, Widget child, {Alignment align = Alignment.centerLeft}) =>
+        SizedBox(width: width, child: Align(alignment: align, child: child));
+
     return Container(
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: TC.gridLine)),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                width: _Col.dot,
-                child: StateDot(n.up, size: TZ.small),
+          cell(_Col.dot, StateDot(n.up, size: TZ.body)),
+          cell(
+            _Col.name,
+            Text(
+              n.instance,
+              style: ts(
+                size: TZ.large,
+                color: nameColor,
+                weight: FontWeight.w500,
               ),
-              SizedBox(
-                width: _Col.name,
-                child: Text(
-                  n.instance,
-                  style: ts(
-                    color: nameColor,
-                    weight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(
-                width: _Col.role,
-                child: Text(
-                  n.role,
-                  style: ts(size: TZ.small, color: TC.dim),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(
-                width: _Col.cpuPct,
-                child: MaybeText(
-                  fmtPct(n.cpuPct),
-                  present: n.cpuPct != null,
-                  align: TextAlign.right,
-                  color: TC.forPct(n.cpuPct),
-                  weight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: _Col.cpuBar,
-                child: BarGauge(pct: n.cpuPct, width: 10),
-              ),
-              SizedBox(
-                width: _Col.cpuSpark,
-                child: SparkText.percent(
-                  values: store.cpuHistory(n.instance),
-                  color: TC.dim,
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: _Col.memText,
-                child: MaybeText(
-                  '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
-                  present: n.memTotal != null,
-                ),
-              ),
-              SizedBox(
-                width: _Col.memPct,
-                child: MaybeText(
-                  fmtPct(n.memPct, digits: 0),
-                  present: n.memPct != null,
-                  align: TextAlign.right,
-                  color: TC.forPct(n.memPct),
-                  weight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: _Col.memBar,
-                child: BarGauge(pct: n.memPct, width: 10),
-              ),
-              SizedBox(
-                width: _Col.memSpark,
-                child: SparkText.percent(
-                  values: store.memHistory(n.instance),
-                  color: TC.dim,
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
-                width: _Col.cores,
-                child: MaybeText(
-                  n.cores?.toStringAsFixed(0) ?? '--',
-                  present: n.cores != null,
-                  align: TextAlign.right,
-                  color: TC.mid,
-                ),
-              ),
-              SizedBox(
-                width: _Col.uptime,
-                child: MaybeText(
-                  fmtDuration(n.uptime),
-                  present: n.bootTime != null,
-                  align: TextAlign.right,
-                  size: TZ.small,
-                  color: TC.mid,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Padding(
-            padding: const EdgeInsets.only(left: _Col.dot),
-            child: Text(
-              'load ${fmtNum(n.load1)}/${fmtNum(n.load5)}/${fmtNum(n.load15)}'
-              '   ·   / ${fmtBytes(n.fsUsed)} of ${fmtBytes(n.fsSize)} (${fmtPct(n.fsPct, digits: 0)})'
-              '   ·   net ↓${fmtRate(n.netRx)} ↑${fmtRate(n.netTx)}'
-              '   ·   iowait ${fmtPct(n.ioWaitPct)}',
-              style: ts(size: TZ.small, color: TC.dim),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          const _VSep(),
+          cell(
+            _Col.cpuPct,
+            MaybeText(
+              fmtPct(n.cpuPct),
+              present: n.cpuPct != null,
+              align: TextAlign.right,
+              size: TZ.large,
+              color: TC.forPct(n.cpuPct),
+              weight: FontWeight.w500,
+            ),
+            align: Alignment.centerRight,
+          ),
+          const SizedBox(width: _Col.pad),
+          cell(
+            _Col.cpuBar,
+            BarGauge(pct: n.cpuPct, size: TZ.large),
+            align: Alignment.centerRight,
+          ),
+          const _VSep(),
+          cell(
+            _Col.memText,
+            MaybeText(
+              '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
+              present: n.memTotal != null,
+              size: TZ.large,
+            ),
+          ),
+          cell(
+            _Col.memPct,
+            MaybeText(
+              fmtPct(n.memPct, digits: 0),
+              present: n.memPct != null,
+              align: TextAlign.right,
+              size: TZ.large,
+              color: TC.forPct(n.memPct),
+              weight: FontWeight.w500,
+            ),
+            align: Alignment.centerRight,
+          ),
+          const SizedBox(width: _Col.pad),
+          cell(
+            _Col.memBar,
+            BarGauge(pct: n.memPct, size: TZ.large),
+            align: Alignment.centerRight,
+          ),
+          const _VSep(),
+          cell(
+            _Col.rootFree,
+            MaybeText(
+              fmtBytes(n.fsAvail),
+              present: n.fsAvail != null,
+              align: TextAlign.right,
+              size: TZ.large,
+              color: TC.mid,
+            ),
+            align: Alignment.centerRight,
+          ),
+          const _VSep(),
+          cell(
+            _Col.uptime,
+            MaybeText(
+              fmtDuration(n.uptime),
+              present: n.bootTime != null,
+              align: TextAlign.right,
+              size: TZ.body,
+              color: TC.mid,
+            ),
+            align: Alignment.centerRight,
+          ),
+          const Spacer(),
         ],
       ),
     );

@@ -76,9 +76,8 @@ void main() {
     expect(find.text('NODES'), findsOneWidget);
     expect(find.text('CAPTURE'), findsOneWidget);
 
-    // Every scrape target has a row, including the down one.
+    // Every guest has a row, including the down one.
     for (final name in [
-      'pve-host',
       'vm-node-1',
       'vm-ops-node',
       'vm-vpn',
@@ -87,11 +86,16 @@ void main() {
     ]) {
       expect(find.text(name), findsOneWidget, reason: 'row for $name');
     }
+    // The hypervisor is the top row of panels, not a table row.
+    expect(find.text('pve-host'), findsNothing);
     expect(find.text('[ 1 DOWN ]'), findsOneWidget);
     // The down target has no series behind it: those cells must read `--`,
     // never a fabricated 0.
-    expect(find.text('gpu-workers'), findsOneWidget);
     expect(find.text('--'), findsWidgets);
+    // Role and core count moved to NODES; the table is one live line per node.
+    expect(find.text('ROLE'), findsNothing);
+    expect(find.text('CORES'), findsNothing);
+    expect(find.text('ROOT FREE'), findsOneWidget);
 
     // CPU package temperature is picked out of hwmon by label, not sensor id.
     expect(find.text('43.4'), findsOneWidget);
@@ -133,35 +137,43 @@ void main() {
       );
     }
 
-    sharesLeft(find.text('INSTANCE'), find.text('pve-host'), 'instance');
-    sharesLeft(find.text('ROLE'), find.text('hypervisor'), 'role');
+    sharesLeft(find.text('INSTANCE'), find.text('vm-node-1'), 'instance');
     // 'MEMORY' is also the memory panel's title; the table header is the later
     // of the two in tree order.
     sharesLeft(
       find.text('MEMORY').last,
-      find.text('14.7G/31.3G'),
+      find.text('4.9G/7.7G'),
       'memory',
     );
 
-    // Right-aligned columns share their right edge instead. '9.2%' is also the
-    // host CPU panel's reading, so again take the later one.
+    // Right-aligned columns share their right edge instead. 'CPU' also labels
+    // a strip in the host panel, so take the later one.
     expect(
-      tester.getTopRight(find.text('CPU%')).dx,
+      tester.getTopRight(find.text('CPU').last).dx,
       moreOrLessEquals(
-        tester.getTopRight(find.text('9.2%').last).dx,
+        tester.getTopRight(find.text('10.6%')).dx,
         epsilon: 0.5,
       ),
       reason: 'CPU% is not right-aligned with its header',
     );
 
+    // Root free is right-aligned under its header too.
+    expect(
+      tester.getTopRight(find.text('ROOT FREE')).dx,
+      moreOrLessEquals(
+        tester.getTopRight(find.text('47.6G')).dx,
+        epsilon: 0.5,
+      ),
+      reason: 'ROOT FREE is not right-aligned with its header',
+    );
+
     // Nothing in a row may sit on top of anything else in that row.
     final cells = <String, Rect>{
-      'name': tester.getRect(find.text('pve-host')),
-      'role': tester.getRect(find.text('hypervisor')),
-      'cpu': tester.getRect(find.text('9.2%').last),
-      'mem': tester.getRect(find.text('14.7G/31.3G')),
-      'memPct': tester.getRect(find.text('47%')),
-      'cores': tester.getRect(find.text('12')),
+      'name': tester.getRect(find.text('vm-node-1')),
+      'cpu': tester.getRect(find.text('10.6%')),
+      'mem': tester.getRect(find.text('4.9G/7.7G')),
+      'memPct': tester.getRect(find.text('64%')),
+      'rootFree': tester.getRect(find.text('47.6G')),
     };
     for (final a in cells.entries) {
       for (final b in cells.entries) {
@@ -178,7 +190,8 @@ void main() {
   testWidgets('a live GPU exporter shows current values', (tester) async {
     await pumpApp(tester, gpuUp: true);
 
-    expect(find.text('[ LIVE ]'), findsOneWidget);
+    // A healthy GPU carries no badge at all; only the bad state is labelled.
+    expect(find.text('[ LIVE ]'), findsNothing);
     expect(find.text('[ DOWN ]'), findsNothing);
     // 9216 MiB used of 9216+7154 MiB total.
     expect(find.textContaining('9.0G of 16.0G'), findsOneWidget);
@@ -258,6 +271,6 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('pve-host'), findsOneWidget);
+    expect(find.text('ROOT FREE'), findsOneWidget);
   });
 }
