@@ -430,45 +430,62 @@ class _Column {
   final String header;
 
   /// Numbers are flushed right so their digits line up; names and compound
-  /// figures read left. A heading always takes the same side as its values —
-  /// that is what stops the header row looking scattered.
+  /// figures read left. Headings ignore this and always start at the column's
+  /// left edge: matching the values' side lined up the far ends instead, which
+  /// left a short label like CPU stranded at the tail of its number while a
+  /// long one like MEMORY hung out past the front of its own.
   final bool right;
 
   Alignment get align => right ? Alignment.centerRight : Alignment.centerLeft;
   TextAlign get textAlign => right ? TextAlign.right : TextAlign.left;
 }
 
-/// The table, declared once. Widths are sized off the widest real value each
-/// column holds at [TZ.large] (0.6em advance); bars carry no heading because
-/// they only restate the number in front of them.
+/// The table, declared once.
+///
+/// Two sizes and no more: every value at [TZ.body], every heading at
+/// [TZ.caption]. A third size in a table of numbers reads as emphasis nobody
+/// asked for.
+///
+/// Each column is as wide as the wider of its longest real value and its
+/// heading — 0.6em per character at [TZ.body], 0.6em plus tracking at
+/// [TZ.caption]. Bars carry no heading; they only restate the number in front
+/// of them.
 abstract final class _Table {
   static const dot = _Column(id: 'dot', width: 24);
-  static const name = _Column(id: 'name', width: 186, header: 'INSTANCE');
-  static const cpu = _Column(id: 'cpu', width: 62, header: 'CPU', right: true);
-  static const cpuBar = _Column(id: 'cpuBar', width: 104, right: true);
+  static const name = _Column(id: 'name', width: 160, header: 'INSTANCE');
+  static const cpu = _Column(id: 'cpu', width: 52, header: 'CPU', right: true);
+  static const cpuBar = _Column(id: 'cpuBar', width: 120, right: true);
   static const mem = _Column(
     id: 'mem',
-    width: 58,
+    width: 56,
     header: 'MEMORY',
     right: true,
   );
-  static const memBar = _Column(id: 'memBar', width: 104, right: true);
-  static const memText = _Column(id: 'memText', width: 128);
-  static const root = _Column(id: 'root', width: 128, header: 'ROOT');
+  static const memBar = _Column(id: 'memBar', width: 120, right: true);
+  static const memText = _Column(id: 'memText', width: 92);
+  static const root = _Column(id: 'root', width: 112, header: 'ROOT');
   static const uptime = _Column(
     id: 'uptime',
-    width: 72,
+    width: 56,
     header: 'UPTIME',
     right: true,
   );
 
   /// Between column groups.
-  static const gap = 20.0;
+  static const gap = 24.0;
 
-  /// Between a number and the bar that repeats it.
+  /// Between a number and the bar that repeats it: they are one reading.
   static const pad = 8.0;
 
-  /// The running order, gaps included. Doubles are spacers.
+  /// After a bar, before the figures that follow it. Wider than [pad], because
+  /// the bar ends in a dark track and the two would otherwise touch.
+  static const barPad = 16.0;
+
+  /// Pushes the last column to the panel edge instead of leaving the row
+  /// trailing off with slack behind it.
+  static const flex = 'flex';
+
+  /// The running order. Doubles are fixed spacers, [flex] is the elastic one.
   static const layout = <Object>[
     dot,
     name,
@@ -480,11 +497,11 @@ abstract final class _Table {
     mem,
     pad,
     memBar,
-    pad,
+    barPad,
     memText,
     gap,
     root,
-    gap,
+    flex,
     uptime,
   ];
 }
@@ -543,14 +560,14 @@ class _TableHeader extends StatelessWidget {
         for (final item in _Table.layout)
           if (item is double)
             SizedBox(width: item)
+          else if (item is String)
+            const Spacer()
           else
             SizedBox(
               key: ValueKey('head-${(item as _Column).id}'),
               width: item.width,
               child: Align(
-                alignment: item.right
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
+                alignment: Alignment.centerLeft,
                 child: Text(
                   item.header,
                   style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
@@ -559,7 +576,6 @@ class _TableHeader extends StatelessWidget {
                 ),
               ),
             ),
-        const Spacer(),
       ],
     );
   }
@@ -587,7 +603,7 @@ class _NodeRow extends StatelessWidget {
       'dot': StateDot(n.up, size: TZ.body),
       'name': Text(
         n.instance,
-        style: ts(size: TZ.large, color: nameColor, weight: FontWeight.w500),
+        style: ts(color: nameColor, weight: FontWeight.w500),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -595,36 +611,31 @@ class _NodeRow extends StatelessWidget {
         fmtPct(n.cpuPct),
         present: n.cpuPct != null,
         align: TextAlign.right,
-        size: TZ.large,
         color: TC.forPct(n.cpuPct),
         weight: FontWeight.w500,
       ),
-      'cpuBar': BarGauge(pct: n.cpuPct, size: TZ.large),
+      'cpuBar': BarGauge(pct: n.cpuPct),
       'mem': MaybeText(
         fmtPct(n.memPct, digits: 0),
         present: n.memPct != null,
         align: TextAlign.right,
-        size: TZ.large,
         color: TC.forPct(n.memPct),
         weight: FontWeight.w500,
       ),
-      'memBar': BarGauge(pct: n.memPct, size: TZ.large),
+      'memBar': BarGauge(pct: n.memPct),
       'memText': MaybeText(
         '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
         present: n.memTotal != null,
-        size: TZ.large,
       ),
       'root': MaybeText(
         '${fmtBytes(n.fsUsed)}/${fmtBytes(n.fsSize)}',
         present: n.fsSize != null,
-        size: TZ.large,
         color: TC.mid,
       ),
       'uptime': MaybeText(
         fmtDuration(n.uptime),
         present: n.bootTime != null,
         align: TextAlign.right,
-        size: TZ.body,
         color: TC.mid,
       ),
     };
@@ -643,6 +654,8 @@ class _NodeRow extends StatelessWidget {
           for (final item in _Table.layout)
             if (item is double)
               SizedBox(width: item)
+            else if (item is String)
+              const Spacer()
             else
               SizedBox(
                 key: ValueKey('cell-${(item as _Column).id}-${n.instance}'),
@@ -652,7 +665,6 @@ class _NodeRow extends StatelessWidget {
                   child: content[item.id],
                 ),
               ),
-          const Spacer(),
         ],
       ),
     );
