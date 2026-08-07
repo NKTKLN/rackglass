@@ -501,10 +501,11 @@ class _TableHeader extends StatelessWidget {
         const SizedBox(width: _Col.pad),
         h('', _Col.cpuBar),
         const SizedBox(width: _Col.gap),
-        h('MEMORY', _Col.memText),
+        h('', _Col.memBar),
+        const SizedBox(width: _Col.pad),
         h('', _Col.memPct),
         const SizedBox(width: _Col.pad),
-        h('', _Col.memBar),
+        h('MEMORY', _Col.memText),
         const SizedBox(width: _Col.gap),
         h('ROOT', _Col.root),
         const SizedBox(width: _Col.gap),
@@ -573,13 +574,11 @@ class _NodeRow extends StatelessWidget {
           ),
           const SizedBox(width: _Col.gap),
           cell(
-            _Col.memText,
-            MaybeText(
-              '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
-              present: n.memTotal != null,
-              size: TZ.large,
-            ),
+            _Col.memBar,
+            BarGauge(pct: n.memPct, size: TZ.large),
+            align: Alignment.centerRight,
           ),
+          const SizedBox(width: _Col.pad),
           cell(
             _Col.memPct,
             MaybeText(
@@ -594,9 +593,12 @@ class _NodeRow extends StatelessWidget {
           ),
           const SizedBox(width: _Col.pad),
           cell(
-            _Col.memBar,
-            BarGauge(pct: n.memPct, size: TZ.large),
-            align: Alignment.centerRight,
+            _Col.memText,
+            MaybeText(
+              '${fmtBytes(n.memUsed)}/${fmtBytes(n.memTotal)}',
+              present: n.memTotal != null,
+              size: TZ.large,
+            ),
           ),
           const SizedBox(width: _Col.gap),
           cell(
