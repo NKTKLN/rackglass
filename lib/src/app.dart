@@ -316,6 +316,8 @@ class _StatusBarState extends State<_StatusBar> {
   Widget build(BuildContext context) {
     final s = widget.store;
     final ok = s.healthy;
+    final snap = s.snapshot;
+    final now = DateTime.now();
     return Container(
       height: Chrome.status,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -326,27 +328,46 @@ class _StatusBarState extends State<_StatusBar> {
         children: [
           const BlinkCursor(size: TZ.small),
           const SizedBox(width: 8),
-          Text(
-            ok ? '[ online ]' : '[ offline ]',
-            style: ts(
-              size: TZ.small,
-              color: ok ? TC.green : TC.red,
-              weight: FontWeight.w700,
+          _Field(
+            label: 'status',
+            child: Text(
+              ok ? '[ online ]' : '[ offline ]',
+              style: ts(
+                size: TZ.small,
+                color: ok ? TC.green : TC.red,
+                weight: FontWeight.w700,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Text(fmtClock(DateTime.now()), style: ts(size: TZ.small)),
-          const SizedBox(width: 12),
+          const _Dot(),
+          _Field(
+            label: 'time',
+            child: Text(fmtClock(now), style: ts(size: TZ.small)),
+          ),
+          const _Dot(),
+          _Field(
+            label: 'last request',
+            child: Text(
+              snap == null
+                  ? '--'
+                  : '${fmtClock(snap.at)} · ${snap.fetchMillis}ms',
+              style: ts(size: TZ.small),
+            ),
+          ),
           // A failure still has to say what it was; hiding it behind the tag
           // would leave a red word and no reason.
-          Expanded(
-            child: Text(
-              ok ? '' : (s.error ?? 'scrape failed'),
-              style: ts(size: TZ.caption, color: TC.red),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          if (!ok) ...[
+            const _Dot(),
+            Expanded(
+              child: Text(
+                s.error ?? 'scrape failed',
+                style: ts(size: TZ.caption, color: TC.red),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
+          ] else
+            const Spacer(),
           const SizedBox(width: 10),
           Text(
             '1-4 mode · ←→ cycle · r refresh · q quit',
@@ -356,6 +377,37 @@ class _StatusBarState extends State<_StatusBar> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// `label: value` pair in the status line.
+class _Field extends StatelessWidget {
+  const _Field({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text('$label: ', style: ts(size: TZ.caption, color: TC.dim)),
+        child,
+      ],
+    );
+  }
+}
+
+/// Separator between status fields.
+class _Dot extends StatelessWidget {
+  const _Dot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Text('·', style: ts(size: TZ.small, color: TC.dim)),
     );
   }
 }
