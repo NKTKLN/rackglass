@@ -412,7 +412,7 @@ class BootSplash extends StatefulWidget {
 
 class _BootSplashState extends State<BootSplash> {
   late final List<String> _script = [
-    'promterm 0.1.0  ·  prometheus terminal',
+    'promterm 1.0.0  ·  prometheus terminal',
     'panel     1024x600 @ 7"',
     'endpoint  ${widget.endpoint}',
     'probing scrape targets ......... ok',

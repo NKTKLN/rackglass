@@ -79,17 +79,18 @@ class CaptureController extends ChangeNotifier {
   /// does not depend on what happens to be plugged into the build machine.
   final List<CaptureDevice>? _fixedDevices;
 
-  static const modes = <CaptureMode>[
-    CaptureMode(1280, 720, 30),
-    CaptureMode(1920, 1080, 30),
-    CaptureMode(1024, 768, 30),
-    CaptureMode(720, 480, 30),
-  ];
+  /// The mode the app runs at. Fixed rather than picked at runtime — see
+  /// [AppConfig.captureWidth] for why this size and not another.
+  static const defaultMode = CaptureMode(
+    AppConfig.captureWidth,
+    AppConfig.captureHeight,
+    AppConfig.captureFps,
+  );
 
   CaptureState _state = CaptureState.idle;
   String? _error;
   ui.Image? _frame;
-  CaptureMode _mode = modes.first;
+  CaptureMode _mode = defaultMode;
   CaptureDevice? _device;
   List<CaptureDevice> _devices = const [];
 

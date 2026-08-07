@@ -12,10 +12,10 @@ dcgm-exporter.
 
 | Key | Mode | What's on it |
 | --- | --- | --- |
-| `1` / `F1` | **DASH** | Host CPU package temp + labelled hwmon sensors, CPU usage, load; GPU temp/util/VRAM/power; host memory and swap with the VM memory budget; one row per scrape target with CPU%, memory, sparklines, load, root fs, network, iowait, uptime |
-| `2` / `F2` | **GRAPHS** | Four range-query charts (CPU %, memory %, temperatures, GPU util + network) over 15m / 1h / 6h / 24h / 7d |
-| `3` / `F3` | **NODES** | Master/detail per target: CPU, memory, root fs, network, boot time, full hwmon sensor list |
-| `4` / `F4` | **CAPTURE** | Reserved stub for the USB capture card — no device bound yet |
+| `1` | **DASH** | Host CPU package temp + labelled hwmon sensors, CPU usage, load; GPU temp/util/VRAM/power; host memory and swap with the VM memory budget; one row per scrape target with CPU%, memory, sparklines, load, root fs, network, iowait, uptime |
+| `2` | **GRAPHS** | Four range-query charts (CPU %, memory %, temperatures, GPU util + network) over 15m / 1h / 6h / 24h / 7d |
+| `3` | **NODES** | Master/detail per target: CPU, memory, root fs, network, boot time, full hwmon sensor list |
+| `4` | **CAPTURE** | Live view from the USB capture card: FIT / 1:1 / 2:1 with drag to pan, fullscreen, frame stats, and a no-signal banner for when the card streams black |
 
 Other keys: `←` `→` cycle modes, `r` force a refresh, `q` / `Esc` quit. Every
 tab and button is also a touch target sized for a finger on a 7" screen.
@@ -79,16 +79,56 @@ label with no room to ellipsize — and it looks broken on the panel while every
 other test stays green. Panel titles hang off the top border, so `TermPanel`
 exposes the `titleGutter` its callers must leave for them.
 
+## USB capture
+
+The card on this desk (MACROSILICON `345f:2109`) exposes MJPG natively, so
+ffmpeg runs as a pure stream copy — nothing is decoded, scaled or re-encoded in
+the child process — and the app splits the concatenated JPEGs itself and hands
+each to Skia. Measured on the real device: ~1% CPU for the child at 1280x720@30.
+
+The geometry is fixed at 1280x720@30 rather than pickable. A 16:9 source
+letterboxes into 1024x576 on this panel, so 720 sits just above what the screen
+can show and downscales cleanly; 1080p costs three times the bandwidth and
+decode for detail the panel cannot display. Measured on the card, every mode
+holds its full rate:
+
+| Mode | fps | Stream | Frame |
+| --- | --- | --- | --- |
+| 1920x1080@60 | 60.2 | 5.89 MB/s | 95 KB |
+| 1920x1080@30 | 30.2 | 2.96 MB/s | 95 KB |
+| 1280x720@30 | 30.2 | 1.33 MB/s | 42 KB |
+| 800x600@30 | 30.2 | 0.70 MB/s | 22 KB |
+
+Override with `--dart-define=CAPTURE_W=1920 --dart-define=CAPTURE_H=1080`.
+
+Decoding keeps the newest frame and drops whatever arrived meanwhile; a queue
+would only ever show progressively staler video. The stream runs while CAPTURE
+is on screen and stops when it leaves.
+
+A capture card with nothing on its HDMI input streams valid black frames
+forever, which is indistinguishable from a broken app, so the frame is
+downscaled to 32x18 and averaged. The picture has to stay black for a full
+second before the banner appears — a fade or one dark scene is not a lost
+signal — while the last good frame keeps showing. A returning source clears it
+with no hold at all.
+
 ## Handling missing data
 
 The GPU exporter on this cluster is frequently down. Rather than blanking the
 panel or showing a misleading `0`, GPU metrics are read through
 `last_over_time(...[7d])` and paired with a staleness age computed from a
-subquery over `timestamp()` — `timestamp()` loses the original sample time when
-it passes through `last_over_time`, so the age needs its own expression. A stale
-panel is drawn amber, badged `[ DOWN ]`, and states how old the readings are.
-The same rule applies everywhere: a metric with no series renders `--`, never
-`0`.
+two age queries. `timestamp()` loses the original sample time when it passes
+through `last_over_time`, so the age needs its own expression — but a subquery
+only evaluates on its own step boundaries, so its answer sawtooths from zero to
+a full step. Measured against the live server it swung 0..300s while the true
+age never passed 15s, which made a healthy GPU drop out every few minutes. A
+fresh series is therefore timed exactly with `time() - timestamp()`, and the
+subquery is kept only for one that stopped long enough ago to fall out of the
+lookback window, where minutes do not matter.
+
+A stale panel is drawn amber, badged `[ DOWN ]`, and states how old the readings
+are. The same rule applies everywhere: a metric with no series renders `--`,
+never `0`.
 
 ## Tests
 
@@ -122,5 +162,6 @@ lib/src/
   model/snapshot.dart      NodeStat / GpuStat / Snapshot
   state/metrics_store.dart polling, history rings, range passthrough
   widgets/                 panel frame, gauges, chart painter, cursor
+  capture/                 v4l2 capture: ffmpeg child, MJPEG framing, decode
   screens/                 dash, graphs, nodes, capture
 ```

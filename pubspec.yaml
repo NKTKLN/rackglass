@@ -1,7 +1,7 @@
 name: promterm
 description: "Terminal-style Prometheus dashboard for a 7\" 1024x600 panel."
 publish_to: 'none'
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ^3.12.2

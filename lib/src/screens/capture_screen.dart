@@ -425,19 +425,13 @@ class _ControlBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           _Button(label: 'FULLSCREEN', selected: false, onTap: onFullscreen),
-          const SizedBox(width: 12),
-          Text('CAPTURE', style: ts(size: TZ.caption, color: TC.dim)),
-          const SizedBox(width: 6),
-          for (final m in CaptureController.modes) ...[
-            _Button(
-              label: m.label,
-              selected: m == c.mode,
-              onTap: () => c.setMode(m),
-            ),
-            const SizedBox(width: 4),
-          ],
+          const SizedBox(width: 14),
+          Text(
+            'mode: ${c.mode.label} · mjpeg',
+            style: ts(size: TZ.caption, color: TC.dim),
+          ),
           if (c.devices.length > 1) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 14),
             for (final d in c.devices) ...[
               _Button(
                 label: d.short,
