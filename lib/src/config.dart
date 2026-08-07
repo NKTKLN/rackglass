@@ -28,4 +28,30 @@ class AppConfig {
 
   /// A GPU reading older than this is rendered as stale rather than current.
   static const gpuStaleAfter = Duration(minutes: 2);
+
+  // ---- USB capture ---------------------------------------------------------
+
+  /// Binary used to pull frames off the V4L2 device.
+  static const ffmpeg = String.fromEnvironment(
+    'FFMPEG',
+    defaultValue: 'ffmpeg',
+  );
+
+  /// How long to wait before respawning a capture that died.
+  static const captureRetry = Duration(seconds: 2);
+
+  /// Discard the JPEG reassembly buffer past this, so a desynced stream cannot
+  /// grow without bound.
+  static const captureBufferLimit = 8 << 20;
+
+  /// How often the frame is sampled to tell a black picture from a live one.
+  static const captureSignalCheck = Duration(milliseconds: 1500);
+
+  /// Faster cadence while the picture is believed black, so a source coming
+  /// back is noticed in well under a second.
+  static const captureSignalRecheck = Duration(milliseconds: 400);
+
+  /// Mean channel value below which a frame counts as no signal. The stick on
+  /// this desk reports a luma average of 7 with nothing on its input.
+  static const captureBlackLevel = 12.0;
 }

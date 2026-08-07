@@ -10,6 +10,7 @@ import 'package:promterm/src/app.dart';
 import 'package:promterm/src/prom/prom_client.dart';
 import 'package:promterm/src/state/metrics_store.dart';
 
+import 'fake_capture.dart';
 import 'fake_prometheus.dart';
 
 /// Renders each mode to `test/preview/*.png` at the exact panel resolution, so
@@ -53,9 +54,12 @@ void main() {
       ),
     );
     addTearDown(store.dispose);
+    // A real ffmpeg would be spawned the moment CAPTURE is selected.
+    final capture = FakeCapture().controller;
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    addTearDown(capture.dispose);
 
-    await tester.pumpWidget(PromTermApp(store: store, showBootSplash: boot));
+    await tester.pumpWidget(PromTermApp(store: store, capture: capture, showBootSplash: boot));
     await store.refresh();
     await tester.pump();
     // Two polls so the sparkline history has something in it.

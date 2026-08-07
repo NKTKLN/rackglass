@@ -9,6 +9,7 @@ import 'package:promterm/src/prom/prom_client.dart';
 import 'package:promterm/src/state/metrics_store.dart';
 import 'package:promterm/src/widgets/gauges.dart';
 
+import 'fake_capture.dart';
 import 'fake_prometheus.dart';
 
 /// Sweeps every visible `Text` on a screen and fails if any two of them share
@@ -50,9 +51,12 @@ void main() {
       ),
     );
     addTearDown(store.dispose);
+    // A real ffmpeg would be spawned the moment CAPTURE is selected.
+    final capture = FakeCapture().controller;
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    addTearDown(capture.dispose);
 
-    await tester.pumpWidget(PromTermApp(store: store, showBootSplash: false));
+    await tester.pumpWidget(PromTermApp(store: store, capture: capture, showBootSplash: false));
     await store.refresh();
     await tester.pump();
     if (mode != 'DASH') {
@@ -108,9 +112,11 @@ void main() {
       ),
     );
     addTearDown(store.dispose);
+    final capture = FakeCapture().controller;
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    addTearDown(capture.dispose);
 
-    await tester.pumpWidget(PromTermApp(store: store, showBootSplash: false));
+    await tester.pumpWidget(PromTermApp(store: store, capture: capture, showBootSplash: false));
     // Several polls so the history rings hold a real shape, not the dotted
     // placeholder that fits anything.
     for (var i = 0; i < 6; i++) {

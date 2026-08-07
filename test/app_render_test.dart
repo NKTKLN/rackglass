@@ -7,6 +7,7 @@ import 'package:promterm/src/app.dart';
 import 'package:promterm/src/prom/prom_client.dart';
 import 'package:promterm/src/state/metrics_store.dart';
 
+import 'fake_capture.dart';
 import 'fake_prometheus.dart';
 
 /// The real panel. Every layout assertion runs at exactly this size.
@@ -49,12 +50,15 @@ void main() {
       ),
     );
     addTearDown(store.dispose);
+    // A real ffmpeg would be spawned the moment CAPTURE is selected.
+    final capture = FakeCapture().controller;
+    addTearDown(capture.dispose);
     // Unmount before the test ends so the header clock and the blinking cursor
     // are disposed; otherwise they trip the pending-timer/ticker check.
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
 
     await tester.pumpWidget(
-      PromTermApp(store: store, showBootSplash: false),
+      PromTermApp(store: store, capture: capture, showBootSplash: false),
     );
     await store.refresh();
     // The status-bar cursor blinks forever, so pumpAndSettle would never
@@ -139,11 +143,12 @@ void main() {
 
     sharesLeft(find.text('INSTANCE'), find.text('vm-node-1'), 'instance');
     // 'MEMORY' is also the memory panel's title; the table header is the later
-    // of the two in tree order.
-    sharesLeft(
-      find.text('MEMORY').last,
-      find.text('4.9G/7.7G'),
-      'memory',
+    // of the two in tree order, and like CPU it sits right-aligned over its
+    // percent.
+    expect(
+      tester.getTopRight(find.text('MEMORY').last).dx,
+      moreOrLessEquals(tester.getTopRight(find.text('64%')).dx, epsilon: 0.5),
+      reason: 'MEMORY is not right-aligned with its percent',
     );
 
     // Right-aligned columns share their right edge instead. 'CPU' also labels
@@ -259,7 +264,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('USB CAPTURE CARD INPUT'), findsOneWidget);
+    expect(find.textContaining('CAPTURE · '), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pump(const Duration(milliseconds: 50));

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'capture/capture_controller.dart';
 import 'config.dart';
 import 'screens/capture_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -26,10 +27,16 @@ enum AppMode {
 }
 
 class PromTermApp extends StatefulWidget {
-  const PromTermApp({super.key, this.store, this.showBootSplash = true});
+  const PromTermApp({
+    super.key,
+    this.store,
+    this.capture,
+    this.showBootSplash = true,
+  });
 
-  /// Injected in tests; production builds let the app own its store.
+  /// Injected in tests; production builds let the app own these.
   final MetricsStore? store;
+  final CaptureController? capture;
   final bool showBootSplash;
 
   @override
@@ -38,6 +45,7 @@ class PromTermApp extends StatefulWidget {
 
 class _PromTermAppState extends State<PromTermApp> {
   late final MetricsStore _store = widget.store ?? MetricsStore();
+  late final CaptureController _capture = widget.capture ?? CaptureController();
   final FocusNode _focus = FocusNode();
 
   AppMode _mode = AppMode.dash;
@@ -59,6 +67,7 @@ class _PromTermAppState extends State<PromTermApp> {
   void dispose() {
     // Only tear down a store we created; an injected one belongs to the caller.
     if (widget.store == null) _store.dispose();
+    if (widget.capture == null) _capture.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -166,7 +175,10 @@ class _PromTermAppState extends State<PromTermApp> {
         DashboardScreen(store: _store),
         _graphs,
         NodesScreen(store: _store),
-        const CaptureScreen(),
+        CaptureScreen(
+          controller: _capture,
+          active: _mode == AppMode.capture,
+        ),
       ],
     );
   }
