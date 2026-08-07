@@ -425,11 +425,13 @@ class _MemoryPanel extends StatelessWidget {
             value:
                 '${fmtBytes(snap.vmMemAllocated)} · ${fmtPct(allocPct, digits: 0)}',
             size: TZ.body,
+            emphasis: false,
           ),
           StatLine(
             label: 'VM IN USE',
             value: fmtBytes(snap.vmMemUsed),
             size: TZ.body,
+            emphasis: false,
           ),
         ],
       ),

@@ -135,6 +135,7 @@ class StatLine extends StatelessWidget {
     this.labelColor = TC.dim,
     this.size = TZ.small,
     this.trailing,
+    this.emphasis = true,
   });
 
   final String label;
@@ -143,6 +144,10 @@ class StatLine extends StatelessWidget {
   final Color labelColor;
   final double size;
   final Widget? trailing;
+
+  /// Values read brighter and heavier than their labels by default. Turn it
+  /// off for figures that are context rather than a reading you act on.
+  final bool emphasis;
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +164,11 @@ class StatLine extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           value,
-          style: ts(size: size, color: valueColor, weight: FontWeight.w500),
+          style: ts(
+            size: size,
+            color: emphasis ? valueColor : TC.fg,
+            weight: emphasis ? FontWeight.w500 : FontWeight.w400,
+          ),
           maxLines: 1,
           softWrap: false,
         ),
