@@ -64,7 +64,12 @@ class AppConfig {
   /// stream then stalled, so a single dark or corrupt frame was enough to raise
   /// the banner. A streak only advances on evidence, so a stall freezes it
   /// instead of running it up.
-  static const captureBlackStreak = 10;
+  ///
+  /// Thirty samples at [captureSignalCheck] is about three seconds of black.
+  /// Slow on purpose: a source that really went away stays away, so nothing is
+  /// lost by waiting, while a banner raised during a dark scene or a stutter is
+  /// a lie you then have to un-see.
+  static const captureBlackStreak = 30;
 
   /// Mean channel value below which a frame counts as no signal. The stick on
   /// this desk reports a luma average of 7 with nothing on its input.

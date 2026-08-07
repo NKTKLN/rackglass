@@ -105,7 +105,7 @@ void main() {
     addTearDown(fake.controller.dispose);
     await fake.controller.start();
 
-    await feed(fake, darkFrame(), 1600);
+    await feed(fake, darkFrame(), 4000);
 
     // Frames are arriving and decoding fine — the picture is simply black,
     // which is what an unplugged HDMI input looks like.
@@ -119,7 +119,7 @@ void main() {
     addTearDown(fake.controller.dispose);
     await fake.controller.start();
 
-    await feed(fake, darkFrame(), 1600);
+    await feed(fake, darkFrame(), 4000);
     expect(fake.controller.state, CaptureState.noSignal);
 
     // No hold on the way back: the source returning is good news.
