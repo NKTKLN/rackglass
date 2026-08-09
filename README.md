@@ -1,4 +1,4 @@
-# 📟 rackglass
+# 📟 Rackglass
 
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
@@ -11,8 +11,9 @@
 [![V4L2](https://img.shields.io/badge/V4L2-MJPEG-555555?logo=linux&logoColor=white)](https://www.kernel.org/doc/html/latest/userspace-api/media/v4l/v4l2.html)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
 [![Made with Claude Code](https://img.shields.io/badge/Made%20with-Claude%20Code-D97757?logo=anthropic&logoColor=white)](https://claude.com/claude-code)
+[![Homelab](https://img.shields.io/badge/homelab-NKTKLN-181717?logo=github&logoColor=white)](https://github.com/NKTKLN/homelab)
 
-**rackglass** is a terminal-style Prometheus dashboard for a 7" 1024x600 panel
+**Rackglass** is a terminal-style Prometheus dashboard for a 7" 1024x600 panel
 sitting on a desk next to the rack. Plain Linux console look: black background,
 grey-white text, box-drawing frames, block-character bars. No phosphor tint, no
 glow, no scanlines.
@@ -21,6 +22,8 @@ It is built against one real cluster — a Proxmox host (`pve-host`, 12 cores /
 32 GiB) with four guests and a Tesla V100 behind dcgm-exporter — and the design
 follows from that: an exporter on this cluster is down often enough that
 *telling live numbers from remembered ones* is the feature, not an edge case.
+That cluster, and the exporters this reads, are set up and documented in
+[NKTKLN/homelab](https://github.com/NKTKLN/homelab).
 
 The same panel also carries a live view from a USB HDMI capture card, so the
 machine being monitored can be watched booting on the screen that monitors it.
