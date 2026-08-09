@@ -35,7 +35,16 @@ static void my_application_activate(GApplication* application) {
   // On the 7" panel the app runs as a kiosk: no titlebar, no window chrome.
   // Set PROMTERM_FULLSCREEN=1 on the target device; on a desktop leave it unset
   // and get a normal 1024x600 window for development.
-  const gboolean kiosk = g_getenv("PROMTERM_FULLSCREEN") != nullptr;
+  // Any value means kiosk except an explicit denial, so a unit already in the
+  // field setting `=yes` keeps working while `=0` finally means what it says.
+  const gchar* fullscreen_env = g_getenv("PROMTERM_FULLSCREEN");
+  gboolean kiosk = FALSE;
+  if (fullscreen_env != nullptr && fullscreen_env[0] != '\0') {
+    kiosk = g_ascii_strcasecmp(fullscreen_env, "0") != 0 &&
+            g_ascii_strcasecmp(fullscreen_env, "false") != 0 &&
+            g_ascii_strcasecmp(fullscreen_env, "no") != 0 &&
+            g_ascii_strcasecmp(fullscreen_env, "off") != 0;
+  }
 
   gboolean use_header_bar = kiosk ? FALSE : TRUE;
 #ifdef GDK_WINDOWING_X11
