@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Build-time configuration: a real endpoint and topology, not for the repo.
+# Copy config.env.example to config.env and edit that.
+config.env

@@ -49,7 +49,7 @@ void main() {
 
     final store = MetricsStore(
       client: PromClient(
-        baseUrl: 'http://192.168.1.13:9090',
+        baseUrl: 'http://prometheus.example:9090',
         client: FakePrometheus(gpuUp: gpuUp).client(),
       ),
     );

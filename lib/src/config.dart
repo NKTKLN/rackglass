@@ -1,10 +1,20 @@
-/// Static configuration. Override at build time, e.g.
-/// `flutter run --dart-define=PROM_URL=http://10.0.0.5:9090`.
+/// Static configuration, resolved at build time.
+///
+/// Every value here comes from a compile-time define, either passed directly
+/// with `--dart-define=KEY=value` or collected from a file with
+/// `--dart-define-from-file=config.env`. The file is the usual way: the
+/// endpoint of somebody's cluster is not something to keep in source control,
+/// and a define that has to be retyped on every build eventually gets it
+/// wrong. See `config.env.example`.
 class AppConfig {
   /// Base URL of the Prometheus server (no trailing slash).
+  ///
+  /// The default points at localhost deliberately: an unconfigured build
+  /// should fail to connect in an obvious way rather than quietly querying
+  /// whatever happens to answer at somebody else's address.
   static const promUrl = String.fromEnvironment(
     'PROM_URL',
-    defaultValue: 'http://192.168.1.13:9090',
+    defaultValue: 'http://localhost:9090',
   );
 
   /// The design canvas. Everything is laid out against these exact pixels and

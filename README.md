@@ -72,20 +72,37 @@ line at the bottom, next to the poll time.
 
 ## 🔧 Build-time configuration
 
-There is no config file and no settings screen — a kiosk panel has nobody in
-front of it to fill one in. Everything is a `--dart-define` baked at build time.
+There is no settings screen — a kiosk panel has nobody in front of it to fill
+one in. Configuration is a set of compile-time defines baked into the binary,
+and the usual way to supply them is an env file:
+
+```sh
+cp config.env.example config.env
+$EDITOR config.env
+
+flutter run   -d linux           --dart-define-from-file=config.env
+flutter build linux --release    --dart-define-from-file=config.env
+```
+
+`config.env` is gitignored, so your endpoint and your topology stay out of the
+repository. Individual values can still be passed directly, and a
+`--dart-define` wins over the same key in the file:
+
+```sh
+flutter run -d linux --dart-define=PROM_URL=http://10.0.0.5:9090
+```
 
 | Define | Default | What it is |
 | --- | --- | --- |
-| `PROM_URL` | `http://192.168.1.13:9090` | Prometheus base URL |
+| `PROM_URL` | `http://localhost:9090` | Prometheus base URL, no trailing slash |
 | `NET_DEVICE_EXCLUDE` | `^(lo\|veth.*\|tap.*\|fwbr.*\|fwln.*\|fwpr.*\|vmbr.*\|docker.*\|br-.*\|virbr.*)$` | Interfaces kept out of network totals |
 | `CAPTURE_W` | `1280` | Capture width requested from the card |
 | `CAPTURE_H` | `720` | Capture height |
 | `CAPTURE_FPS` | `30` | Capture frame rate |
 
-```sh
-flutter run -d linux --dart-define=PROM_URL=http://10.0.0.5:9090
-```
+The default endpoint points at localhost on purpose: an unconfigured build
+should fail to connect in a way you notice, rather than quietly querying
+whatever answers at an address left in the source by someone else.
 
 The interface exclusion matters on a Proxmox host: without it the same
 forwarded packet is counted on the physical NIC, the bridge and the tap device,
