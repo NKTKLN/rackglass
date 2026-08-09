@@ -1,4 +1,4 @@
-name: promterm
+name: rackglass
 description: "Terminal-style Prometheus dashboard for a 7\" 1024x600 panel."
 publish_to: 'none'
 version: 1.0.0+1

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:promterm/src/prom/queries.dart';
+import 'package:rackglass/src/prom/queries.dart';
 
 /// A stand-in Prometheus built from real responses captured off the live server
 /// (Proxmox host + 4 guests, a Tesla V100 whose dcgm-exporter is down).

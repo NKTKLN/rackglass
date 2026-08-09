@@ -6,9 +6,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:promterm/src/app.dart';
-import 'package:promterm/src/prom/prom_client.dart';
-import 'package:promterm/src/state/metrics_store.dart';
+import 'package:rackglass/src/app.dart';
+import 'package:rackglass/src/prom/prom_client.dart';
+import 'package:rackglass/src/state/metrics_store.dart';
 
 import 'fake_capture.dart';
 import 'fake_prometheus.dart';
@@ -17,10 +17,10 @@ import 'fake_prometheus.dart';
 /// the design can be reviewed without a GTK toolchain.
 ///
 ///   flutter test test/preview_test.dart \
-///     --dart-define=PROMTERM_PREVIEW=true --update-goldens
+///     --dart-define=RACKGLASS_PREVIEW=true --update-goldens
 void main() {
   // Off in a plain `flutter test` run: these write files rather than assert.
-  const skip = !bool.fromEnvironment('PROMTERM_PREVIEW');
+  const skip = !bool.fromEnvironment('RACKGLASS_PREVIEW');
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +59,7 @@ void main() {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     addTearDown(capture.dispose);
 
-    await tester.pumpWidget(PromTermApp(store: store, capture: capture, showBootSplash: boot));
+    await tester.pumpWidget(RackglassApp(store: store, capture: capture, showBootSplash: boot));
     await store.refresh();
     await tester.pump();
     // Two polls so the sparkline history has something in it.
@@ -76,7 +76,7 @@ void main() {
     }
 
     await expectLater(
-      find.byType(PromTermApp),
+      find.byType(RackglassApp),
       matchesGoldenFile('preview/$name.png'),
     );
   }

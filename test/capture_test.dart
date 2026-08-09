@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:promterm/src/capture/capture_controller.dart';
+import 'package:rackglass/src/capture/capture_controller.dart';
 
 import 'fake_capture.dart';
 

@@ -4,10 +4,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:promterm/src/app.dart';
-import 'package:promterm/src/prom/prom_client.dart';
-import 'package:promterm/src/state/metrics_store.dart';
-import 'package:promterm/src/widgets/gauges.dart';
+import 'package:rackglass/src/app.dart';
+import 'package:rackglass/src/prom/prom_client.dart';
+import 'package:rackglass/src/state/metrics_store.dart';
+import 'package:rackglass/src/widgets/gauges.dart';
 
 import 'fake_capture.dart';
 import 'fake_prometheus.dart';
@@ -56,7 +56,7 @@ void main() {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     addTearDown(capture.dispose);
 
-    await tester.pumpWidget(PromTermApp(store: store, capture: capture, showBootSplash: false));
+    await tester.pumpWidget(RackglassApp(store: store, capture: capture, showBootSplash: false));
     await store.refresh();
     await tester.pump();
     if (mode != 'DASH') {
@@ -116,7 +116,7 @@ void main() {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     addTearDown(capture.dispose);
 
-    await tester.pumpWidget(PromTermApp(store: store, capture: capture, showBootSplash: false));
+    await tester.pumpWidget(RackglassApp(store: store, capture: capture, showBootSplash: false));
     // Several polls so the history rings hold a real shape, not the dotted
     // placeholder that fits anything.
     for (var i = 0; i < 6; i++) {
@@ -205,7 +205,7 @@ void main() {
     addTearDown(capture.dispose);
 
     await tester.pumpWidget(
-      PromTermApp(store: store, capture: capture, showBootSplash: false),
+      RackglassApp(store: store, capture: capture, showBootSplash: false),
     );
     await store.refresh();
     await tester.pump();

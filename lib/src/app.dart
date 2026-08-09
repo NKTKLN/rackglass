@@ -25,8 +25,8 @@ enum AppMode {
   final String label;
 }
 
-class PromTermApp extends StatefulWidget {
-  const PromTermApp({
+class RackglassApp extends StatefulWidget {
+  const RackglassApp({
     super.key,
     this.store,
     this.capture,
@@ -39,10 +39,10 @@ class PromTermApp extends StatefulWidget {
   final bool showBootSplash;
 
   @override
-  State<PromTermApp> createState() => _PromTermAppState();
+  State<RackglassApp> createState() => _RackglassAppState();
 }
 
-class _PromTermAppState extends State<PromTermApp> {
+class _RackglassAppState extends State<RackglassApp> {
   late final MetricsStore _store = widget.store ?? MetricsStore();
   late final CaptureController _capture = widget.capture ?? CaptureController();
   final FocusNode _focus = FocusNode();
@@ -111,7 +111,7 @@ class _PromTermAppState extends State<PromTermApp> {
   @override
   Widget build(BuildContext context) {
     return WidgetsApp(
-      title: 'promterm',
+      title: 'rackglass',
       color: TC.bg,
       debugShowCheckedModeBanner: false,
       builder: (context, _) => _root(),
@@ -428,7 +428,7 @@ class BootSplash extends StatefulWidget {
 
 class _BootSplashState extends State<BootSplash> {
   late final List<String> _script = [
-    'promterm 1.0.0  ·  prometheus terminal',
+    'rackglass 1.0.0  ·  prometheus + hdmi capture',
     'panel     1024x600 @ 7"',
     'endpoint  ${widget.endpoint}',
     'probing scrape targets ......... ok',
@@ -475,7 +475,7 @@ class _BootSplashState extends State<BootSplash> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'PROMTERM',
+              'RACKGLASS',
               style: ts(
                 size: 48,
                 color: TC.bright,

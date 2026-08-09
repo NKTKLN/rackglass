@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:promterm/src/app.dart';
-import 'package:promterm/src/prom/prom_client.dart';
-import 'package:promterm/src/state/metrics_store.dart';
-import 'package:promterm/src/widgets/term_panel.dart';
+import 'package:rackglass/src/app.dart';
+import 'package:rackglass/src/prom/prom_client.dart';
+import 'package:rackglass/src/state/metrics_store.dart';
+import 'package:rackglass/src/widgets/term_panel.dart';
 
 import 'fake_capture.dart';
 import 'fake_prometheus.dart';
@@ -63,7 +63,7 @@ void main() {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
 
     await tester.pumpWidget(
-      PromTermApp(store: store, capture: capture, showBootSplash: false),
+      RackglassApp(store: store, capture: capture, showBootSplash: false),
     );
     await store.refresh();
     // The status-bar cursor blinks forever, so pumpAndSettle would never

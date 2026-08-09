@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:promterm/src/capture/capture_controller.dart';
+import 'package:rackglass/src/capture/capture_controller.dart';
 
 /// A 16x16 mid-grey JPEG, and the same frame in near-black. Real files, so the
 /// tests exercise the actual JPEG path rather than a stand-in: framing, Skia

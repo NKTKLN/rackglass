@@ -4,18 +4,18 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:promterm/src/config.dart';
-import 'package:promterm/src/prom/prom_client.dart';
-import 'package:promterm/src/prom/queries.dart';
-import 'package:promterm/src/state/metrics_store.dart';
+import 'package:rackglass/src/config.dart';
+import 'package:rackglass/src/prom/prom_client.dart';
+import 'package:rackglass/src/prom/queries.dart';
+import 'package:rackglass/src/state/metrics_store.dart';
 
 /// Hits the real Prometheus and checks that every expression the UI issues
 /// still parses and returns what the models expect. Not part of the default
 /// suite — it needs the server reachable.
 ///
-///   flutter test test/live_smoke_test.dart --dart-define=PROMTERM_LIVE=1
+///   flutter test test/live_smoke_test.dart --dart-define=RACKGLASS_LIVE=1
 void main() {
-  const live = bool.fromEnvironment('PROMTERM_LIVE');
+  const live = bool.fromEnvironment('RACKGLASS_LIVE');
 
   test('every instant query the UI issues returns usable data', () async {
     final client = PromClient();
@@ -40,7 +40,7 @@ void main() {
       }
       stdout.writeln('${e.key.name.padRight(14)} ${r.length} series');
     }
-  }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
+  }, skip: live ? false : 'set --dart-define=RACKGLASS_LIVE=1');
 
   test('historical GPU fallback expressions still parse', () async {
     final client = PromClient();
@@ -51,7 +51,7 @@ void main() {
       final label = 'fallback.${e.key.name}'.padRight(22);
       stdout.writeln('$label ${r.length} series');
     }
-  }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
+  }, skip: live ? false : 'set --dart-define=RACKGLASS_LIVE=1');
 
   test('a full poll builds a coherent snapshot', () async {
     final store = MetricsStore();
@@ -79,7 +79,7 @@ void main() {
         '${g.stale ? "STALE ${g.age}" : "live"}',
       );
     }
-  }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
+  }, skip: live ? false : 'set --dart-define=RACKGLASS_LIVE=1');
 
   test('every range query used by the graphs screen returns a matrix', () async {
     final store = MetricsStore();
@@ -109,5 +109,5 @@ void main() {
         '@ step ${MetricsStore.stepFor(window).inSeconds}s',
       );
     }
-  }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
+  }, skip: live ? false : 'set --dart-define=RACKGLASS_LIVE=1');
 }

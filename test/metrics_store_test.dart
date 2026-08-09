@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:promterm/src/prom/prom_client.dart';
-import 'package:promterm/src/prom/queries.dart';
-import 'package:promterm/src/state/metrics_store.dart';
+import 'package:rackglass/src/prom/prom_client.dart';
+import 'package:rackglass/src/prom/queries.dart';
+import 'package:rackglass/src/state/metrics_store.dart';
 
 import 'fake_prometheus.dart';
 

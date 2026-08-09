@@ -33,11 +33,11 @@ static void my_application_activate(GApplication* application) {
   // If running on Wayland assume the header bar will work (may need changing
   // if future cases occur).
   // On the 7" panel the app runs as a kiosk: no titlebar, no window chrome.
-  // Set PROMTERM_FULLSCREEN=1 on the target device; on a desktop leave it unset
+  // Set RACKGLASS_FULLSCREEN=1 on the target device; on a desktop leave it unset
   // and get a normal 1024x600 window for development.
   // Any value means kiosk except an explicit denial, so a unit already in the
   // field setting `=yes` keeps working while `=0` finally means what it says.
-  const gchar* fullscreen_env = g_getenv("PROMTERM_FULLSCREEN");
+  const gchar* fullscreen_env = g_getenv("RACKGLASS_FULLSCREEN");
   gboolean kiosk = FALSE;
   if (fullscreen_env != nullptr && fullscreen_env[0] != '\0') {
     kiosk = g_ascii_strcasecmp(fullscreen_env, "0") != 0 &&
@@ -59,11 +59,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "promterm");
+    gtk_header_bar_set_title(header_bar, "rackglass");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "promterm");
+    gtk_window_set_title(window, "rackglass");
   }
 
   // Match the target panel exactly so what you see while developing is what

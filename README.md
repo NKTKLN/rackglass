@@ -1,4 +1,4 @@
-# 📟 promterm
+# 📟 rackglass
 
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
@@ -12,7 +12,7 @@
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
 [![Made with Claude Code](https://img.shields.io/badge/Made%20with-Claude%20Code-D97757?logo=anthropic&logoColor=white)](https://claude.com/claude-code)
 
-**promterm** is a terminal-style Prometheus dashboard for a 7" 1024x600 panel
+**rackglass** is a terminal-style Prometheus dashboard for a 7" 1024x600 panel
 sitting on a desk next to the rack. Plain Linux console look: black background,
 grey-white text, box-drawing frames, block-character bars. No phosphor tint, no
 glow, no scanlines.
@@ -93,7 +93,7 @@ and the host appears to be moving three times the traffic it is.
 
 Environment variables, read at launch rather than build:
 
-* `PROMTERM_FULLSCREEN` — any value except `0`, `false`, `no` or `off` drops the
+* `RACKGLASS_FULLSCREEN` — any value except `0`, `false`, `no` or `off` drops the
   titlebar and goes fullscreen
 
 ## 🚀 Running
@@ -108,10 +108,10 @@ On the panel:
 
 ```sh
 flutter build linux --release
-PROMTERM_FULLSCREEN=1 ./build/linux/x64/release/bundle/promterm
+RACKGLASS_FULLSCREEN=1 ./build/linux/x64/release/bundle/rackglass
 ```
 
-Without `PROMTERM_FULLSCREEN` you get a normal 1024x600 window, which is the
+Without `RACKGLASS_FULLSCREEN` you get a normal 1024x600 window, which is the
 exact panel size — what you see while developing is what lands on the device.
 
 ## 🧪 Tests
@@ -131,7 +131,7 @@ issues still returns usable data. It needs the server reachable, so it is off by
 default:
 
 ```sh
-flutter test test/live_smoke_test.dart --dart-define=PROMTERM_LIVE=true --tags live
+flutter test test/live_smoke_test.dart --dart-define=RACKGLASS_LIVE=true --tags live
 ```
 
 ## 📐 Layout
