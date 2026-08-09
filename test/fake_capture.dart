@@ -76,14 +76,23 @@ class FakeProcess implements Process {
 
 /// A controller wired to [FakeProcess] with a fixed device list.
 class FakeCapture {
-  FakeCapture({this.stderrText = ''});
+  FakeCapture({
+    this.stderrText = '',
+    this.retryDelay = const Duration(seconds: 2),
+    this.devices = const [
+      CaptureDevice('/dev/video0', 'UVC Camera (345f:2109)'),
+    ],
+  });
 
   final String stderrText;
+  final Duration retryDelay;
+  final List<CaptureDevice> devices;
   final List<FakeProcess> spawned = [];
   final List<List<String>> commands = [];
 
   late final CaptureController controller = CaptureController(
-    devices: const [CaptureDevice('/dev/video0', 'UVC Camera (345f:2109)')],
+    devices: devices,
+    retryDelay: retryDelay,
     spawn:
         (
           String executable,

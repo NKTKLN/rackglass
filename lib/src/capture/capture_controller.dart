@@ -59,12 +59,16 @@ class CaptureDevice {
 /// Reads Motion-JPEG straight off a V4L2 capture device and hands the newest
 /// decoded frame to the UI.
 ///
-/// The device on this desk (MACROSILICON 345f:2109) exposes MJPG natively, so
-/// ffmpeg runs as a stream copy: no decode, no scale, no re-encode in the
-/// child process. Everything it emits is a JPEG that Skia decodes directly.
+/// Every asynchronous operation is tied to a capture generation. Restarting,
+/// stopping, or changing the device invalidates that generation before the old
+/// process is torn down, so late process exits, JPEG decodes and signal checks
+/// cannot mutate the next session.
 class CaptureController extends ChangeNotifier {
-  CaptureController({this.spawn = Process.start, List<CaptureDevice>? devices})
-    : _fixedDevices = devices;
+  CaptureController({
+    this.spawn = Process.start,
+    List<CaptureDevice>? devices,
+    this.retryDelay = AppConfig.captureRetry,
+  }) : _fixedDevices = devices;
 
   /// Injected in tests.
   final Future<Process> Function(
@@ -79,8 +83,10 @@ class CaptureController extends ChangeNotifier {
   /// does not depend on what happens to be plugged into the build machine.
   final List<CaptureDevice>? _fixedDevices;
 
-  /// The mode the app runs at. Fixed rather than picked at runtime — see
-  /// [AppConfig.captureWidth] for why this size and not another.
+  /// Injectable so retry behavior can be regression-tested without sleeping
+  /// for the production two-second backoff.
+  final Duration retryDelay;
+
   static const defaultMode = CaptureMode(
     AppConfig.captureWidth,
     AppConfig.captureHeight,
@@ -93,6 +99,10 @@ class CaptureController extends ChangeNotifier {
   CaptureMode _mode = defaultMode;
   CaptureDevice? _device;
   List<CaptureDevice> _devices = const [];
+  bool _devicePinned = false;
+
+  /// Nodes already rejected during the current attempt cycle.
+  final Set<String> _nodesTried = {};
 
   Process? _proc;
   StreamSubscription<List<int>>? _stdout;
@@ -102,9 +112,13 @@ class CaptureController extends ChangeNotifier {
   bool _wantRunning = false;
   bool _disposed = false;
 
+  /// Monotonically increasing token for the currently valid capture session.
+  int _generation = 0;
+
   Uint8List _buf = Uint8List(0);
-  Uint8List? _queued;
+  (int, Uint8List)? _queued;
   bool _decoding = false;
+  bool _signalCheckInFlight = false;
 
   final List<DateTime> _frameTimes = [];
   int _framesTotal = 0;
@@ -144,9 +158,6 @@ class CaptureController extends ChangeNotifier {
   String get sourceLabel =>
       _device == null ? 'no device' : '${_device!.short} · ${_device!.name}';
 
-  /// Scans `/dev/video*`, naming each through sysfs. Nodes that cannot capture
-  /// (a UVC stick also exposes a metadata node) are filtered out by ffmpeg
-  /// failing on them, not here — the kernel name alone does not say.
   Future<void> discover() async {
     if (_fixedDevices != null) {
       _devices = _fixedDevices;
@@ -179,21 +190,30 @@ class CaptureController extends ChangeNotifier {
     _devices = found;
     if (_device == null || !found.any((d) => d.path == _device!.path)) {
       _device = found.isEmpty ? null : found.first;
+      _devicePinned = false;
     }
     if (!_disposed) notifyListeners();
   }
 
   Future<void> start() async {
-    if (_wantRunning) return;
+    if (_wantRunning || _disposed) return;
     _wantRunning = true;
-    if (_devices.isEmpty) await discover();
-    await _spawn();
+    _retryTimer?.cancel();
+    // Pressing START is an explicit fresh attempt: every node is fair game
+    // again, whatever failed last time.
+    _nodesTried.clear();
+    await _restartSession();
   }
 
   Future<void> stop() async {
+    if (_disposed) return;
     _wantRunning = false;
     _retryTimer?.cancel();
-    await _teardown();
+    _retryTimer = null;
+    // Invalidate every callback before killing the process. Process.exitCode can
+    // complete synchronously from a fake process and on some real teardown paths.
+    _generation++;
+    await _teardownResources();
     _setState(CaptureState.idle);
   }
 
@@ -201,32 +221,53 @@ class CaptureController extends ChangeNotifier {
     if (m == _mode) return;
     _mode = m;
     if (_wantRunning) {
-      await _teardown();
-      await _spawn();
-    } else {
+      await _restartSession();
+    } else if (!_disposed) {
       notifyListeners();
     }
   }
 
   Future<void> setDevice(CaptureDevice d) async {
-    if (d.path == _device?.path) return;
+    if (d.path == _device?.path) {
+      _devicePinned = true;
+      return;
+    }
     _device = d;
+    _devicePinned = true;
     if (_wantRunning) {
-      await _teardown();
-      await _spawn();
-    } else {
+      await _restartSession();
+    } else if (!_disposed) {
       notifyListeners();
     }
   }
 
-  Future<void> _spawn() async {
+  bool _isActive(int generation) =>
+      !_disposed && _wantRunning && generation == _generation;
+
+  Future<void> _restartSession() async {
+    if (_disposed || !_wantRunning) return;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    final generation = ++_generation;
+    await _teardownResources();
+    if (!_isActive(generation)) return;
+    await discover();
+    if (!_isActive(generation)) return;
+    await _spawn(generation);
+  }
+
+  Future<void> _spawn(int generation) async {
+    if (!_isActive(generation)) return;
     final dev = _device;
     if (dev == null) {
-      _fail('no /dev/video* node found');
+      _failFor(generation, 'no /dev/video* node found');
+      _scheduleRetry(generation);
       return;
     }
-    _setState(CaptureState.starting);
+
+    _setStateFor(generation, CaptureState.starting);
     _buf = Uint8List(0);
+    _queued = null;
     _stderrTail.clear();
     _framesTotal = 0;
     _framesDropped = 0;
@@ -235,8 +276,10 @@ class CaptureController extends ChangeNotifier {
     _frameTimes.clear();
     _blackStreak = 0;
     _lastSignalCheck = null;
+    _signalCheckInFlight = false;
     _startedAt = DateTime.now();
 
+    final mode = _mode;
     final args = <String>[
       '-hide_banner',
       '-loglevel', 'error',
@@ -244,27 +287,40 @@ class CaptureController extends ChangeNotifier {
       '-flags', 'low_delay',
       '-f', 'v4l2',
       '-input_format', 'mjpeg',
-      '-video_size', '${_mode.width}x${_mode.height}',
-      '-framerate', '${_mode.fps}',
+      '-video_size', '${mode.width}x${mode.height}',
+      '-framerate', '${mode.fps}',
       '-i', dev.path,
       '-f', 'mjpeg',
-      // Stream copy: the device already emits JPEG, so nothing is re-encoded.
       '-c:v', 'copy',
       '-',
     ];
 
+    Process proc;
     try {
-      _proc = await spawn(AppConfig.ffmpeg, args);
+      proc = await spawn(AppConfig.ffmpeg, args);
     } catch (e) {
-      _fail('cannot run ${AppConfig.ffmpeg}: $e');
+      if (!_isActive(generation)) return;
+      _failFor(generation, 'cannot run ${AppConfig.ffmpeg}: $e');
+      _scheduleRetry(generation);
       return;
     }
 
-    _stdout = _proc!.stdout.listen(
-      _onBytes,
-      onError: (Object e) => _fail('stdout: $e'),
+    if (!_isActive(generation)) {
+      proc.kill(ProcessSignal.sigterm);
+      return;
+    }
+    _proc = proc;
+
+    _stdout = proc.stdout.listen(
+      (chunk) => _onBytes(generation, chunk),
+      onError: (Object e) {
+        if (!_isActive(generation) || !identical(_proc, proc)) return;
+        _failFor(generation, 'stdout: $e');
+        _scheduleRetry(generation);
+      },
     );
-    _stderr = _proc!.stderr.listen((d) {
+    _stderr = proc.stderr.listen((d) {
+      if (!_isActive(generation) || !identical(_proc, proc)) return;
       final text = String.fromCharCodes(d).trim();
       if (text.isEmpty) return;
       _stderrTail.addAll(text.split('\n'));
@@ -274,67 +330,117 @@ class CaptureController extends ChangeNotifier {
     });
 
     unawaited(
-      _proc!.exitCode.then((code) {
-        if (_disposed || !_wantRunning) return;
-        // ffmpeg exiting while we still want frames means the device went
-        // away, is busy, or refused the mode. Surface its own words.
-        _fail(
-          _stderrTail.isEmpty
-              ? 'ffmpeg exited with code $code'
-              : _stderrTail.last,
-        );
-        _retryTimer?.cancel();
-        _retryTimer = Timer(AppConfig.captureRetry, () {
-          if (_wantRunning && !_disposed) _spawn();
-        });
+      proc.exitCode.then((code) {
+        if (!_isActive(generation) || !identical(_proc, proc)) return;
+        final message = _stderrTail.isEmpty
+            ? 'ffmpeg exited with code $code'
+            : _stderrTail.last;
+        final diagnostic = _stderrTail.isEmpty ? message : _stderrTail.join('\n');
+        if (_tryNextVideoNode(generation, diagnostic)) return;
+        _failFor(generation, message);
+        _scheduleRetry(generation);
       }),
     );
 
     _statsTimer?.cancel();
     _statsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!_isActive(generation)) return;
       _pruneFrameTimes();
-      if (!_disposed) notifyListeners();
+      notifyListeners();
     });
-    notifyListeners();
+    if (_isActive(generation)) notifyListeners();
   }
 
-  Future<void> _teardown() async {
+  void _scheduleRetry(int generation) {
+    if (!_isActive(generation)) return;
+    _retryTimer?.cancel();
+    _retryTimer = Timer(retryDelay, () {
+      // A new cycle reconsiders every node, including ones that failed a
+      // moment ago: whatever was holding the device may have let go by now.
+      // The pointer goes back to the head of the list too, or the search would
+      // resume from wherever the last cycle gave up and never return to the
+      // node that is actually the capture one.
+      _nodesTried.clear();
+      if (!_devicePinned && _devices.isNotEmpty) _device = _devices.first;
+      if (_isActive(generation)) unawaited(_restartSession());
+    });
+  }
+
+  /// Some UVC devices expose a capture node and a metadata/control node next
+  /// to each other. If the automatically selected node is explicitly rejected
+  /// as non-capture by V4L2/ffmpeg, try another discovered node immediately.
+  /// A device chosen by the user is never silently replaced.
+  ///
+  /// The search walks nodes not yet tried in this cycle rather than only ever
+  /// moving forward. Walking forward alone strands the controller on the last
+  /// node once the real capture node fails even briefly — say it was still
+  /// held by the previous ffmpeg — and no amount of retrying ever goes back to
+  /// it. [_nodesTried] is cleared whenever a fresh attempt cycle begins, so a
+  /// node that failed once is reconsidered on the next retry.
+  bool _tryNextVideoNode(int generation, String message) {
+    if (!_isActive(generation) || _devicePinned || _devices.length < 2) {
+      return false;
+    }
+    final lower = message.toLowerCase();
+    final wrongNode =
+        lower.contains('not a video capture') ||
+        lower.contains('not a capture device') ||
+        lower.contains('inappropriate ioctl') ||
+        lower.contains('not a video4linux2 device');
+    if (!wrongNode) return false;
+
+    if (_device != null) _nodesTried.add(_device!.path);
+    CaptureDevice? next;
+    for (final d in _devices) {
+      if (!_nodesTried.contains(d.path)) {
+        next = d;
+        break;
+      }
+    }
+    if (next == null) return false;
+    _device = next;
+    unawaited(_restartSession());
+    return true;
+  }
+
+  Future<void> _teardownResources() async {
     _statsTimer?.cancel();
     _statsTimer = null;
     await _stdout?.cancel();
     await _stderr?.cancel();
     _stdout = null;
     _stderr = null;
-    _proc?.kill(ProcessSignal.sigterm);
+    final proc = _proc;
     _proc = null;
+    proc?.kill(ProcessSignal.sigterm);
     _buf = Uint8List(0);
     _queued = null;
+    _blackStreak = 0;
+    _lastSignalCheck = null;
+    _signalCheckInFlight = false;
     _frame?.dispose();
     _frame = null;
     _frameTimes.clear();
     _startedAt = null;
   }
 
-  void _onBytes(List<int> chunk) {
-    if (_disposed) return;
+  void _onBytes(int generation, List<int> chunk) {
+    if (!_isActive(generation)) return;
     _bytesTotal += chunk.length;
     final merged = Uint8List(_buf.length + chunk.length);
     merged.setAll(0, _buf);
     merged.setAll(_buf.length, chunk);
     _buf = merged;
 
-    // Frames are concatenated JPEGs; the next SOI marker ends the current one.
     var start = _indexOfSoi(_buf, 0);
     if (start < 0) {
-      // Nothing usable yet. Cap the buffer so a desynced stream cannot grow
-      // without bound.
       if (_buf.length > AppConfig.captureBufferLimit) _buf = Uint8List(0);
       return;
     }
     while (true) {
       final next = _indexOfSoi(_buf, start + 3);
       if (next < 0) break;
-      _submit(Uint8List.sublistView(_buf, start, next));
+      _submit(generation, Uint8List.sublistView(_buf, start, next));
       start = next;
     }
     _buf = Uint8List.fromList(Uint8List.sublistView(_buf, start));
@@ -350,46 +456,55 @@ class CaptureController extends ChangeNotifier {
     return -1;
   }
 
-  /// Newest frame wins. If decoding falls behind the device, the frames in
-  /// between are dropped rather than queued — a growing queue would show
-  /// progressively staler video.
-  void _submit(Uint8List jpeg) {
+  /// Newest frame wins. Queue entries retain the generation they came from so
+  /// a decoder finishing after a restart cannot consume a new session's frame.
+  void _submit(int generation, Uint8List jpeg) {
+    if (!_isActive(generation)) return;
     if (_queued != null) _framesDropped++;
-    _queued = jpeg;
+    _queued = (generation, jpeg);
     if (!_decoding) unawaited(_drain());
   }
 
   Future<void> _drain() async {
+    if (_decoding) return;
     _decoding = true;
-    while (_queued != null && !_disposed) {
-      final data = _queued!;
-      _queued = null;
-      try {
-        final codec = await ui.instantiateImageCodec(data);
-        final frame = await codec.getNextFrame();
-        codec.dispose();
-        if (_disposed) {
-          frame.image.dispose();
-          break;
+    try {
+      while (!_disposed) {
+        final queued = _queued;
+        if (queued == null) break;
+        _queued = null;
+        final generation = queued.$1;
+        final data = queued.$2;
+        if (!_isActive(generation)) continue;
+
+        try {
+          final codec = await ui.instantiateImageCodec(data);
+          final decoded = await codec.getNextFrame();
+          codec.dispose();
+          if (!_isActive(generation)) {
+            decoded.image.dispose();
+            continue;
+          }
+
+          _frame?.dispose();
+          _frame = decoded.image;
+          _framesTotal++;
+          _frameTimes.add(DateTime.now());
+          _pruneFrameTimes();
+          if (_state != CaptureState.noSignal) {
+            _setStateFor(generation, CaptureState.streaming);
+          } else {
+            notifyListeners();
+          }
+          unawaited(_maybeCheckSignal(generation, decoded.image));
+        } catch (_) {
+          if (_isActive(generation)) _decodeErrors++;
         }
-        _frame?.dispose();
-        _frame = frame.image;
-        _framesTotal++;
-        _frameTimes.add(DateTime.now());
-        _pruneFrameTimes();
-        if (_state != CaptureState.noSignal) {
-          _setState(CaptureState.streaming);
-        } else {
-          notifyListeners();
-        }
-        unawaited(_maybeCheckSignal());
-      } catch (_) {
-        // A truncated or corrupt frame is normal at startup while syncing to
-        // the stream; only a run of them means anything.
-        _decodeErrors++;
       }
+    } finally {
+      _decoding = false;
+      if (_queued != null && !_disposed) unawaited(_drain());
     }
-    _decoding = false;
   }
 
   void _pruneFrameTimes() {
@@ -399,18 +514,15 @@ class CaptureController extends ChangeNotifier {
     }
   }
 
-  /// Downscales the current frame to a thumbnail and averages it. A capture
-  /// stick with an unplugged input streams valid black frames forever, which
-  /// is indistinguishable from a bug unless the app says so.
-  Future<void> _maybeCheckSignal() async {
+  Future<void> _maybeCheckSignal(int generation, ui.Image img) async {
+    if (!_isActive(generation) || _signalCheckInFlight) return;
     final now = DateTime.now();
     if (_lastSignalCheck != null &&
         now.difference(_lastSignalCheck!) < AppConfig.captureSignalCheck) {
       return;
     }
     _lastSignalCheck = now;
-    final img = _frame;
-    if (img == null) return;
+    _signalCheckInFlight = true;
     try {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
@@ -425,39 +537,44 @@ class CaptureController extends ChangeNotifier {
       picture.dispose();
       final bytes = await small.toByteData(format: ui.ImageByteFormat.rawRgba);
       small.dispose();
-      if (bytes == null || _disposed) return;
+      if (bytes == null || !_isActive(generation)) return;
+
       var sum = 0;
       final d = bytes.buffer.asUint8List();
       for (var i = 0; i < d.length; i += 4) {
         sum += d[i] + d[i + 1] + d[i + 2];
       }
       final mean = sum / (d.length / 4 * 3);
-      if (_state == CaptureState.idle) return;
+      if (!_isActive(generation)) return;
 
       if (mean >= AppConfig.captureBlackLevel) {
-        // Any picture at all clears it immediately: a source coming back
-        // should not make you wait.
         _blackStreak = 0;
         if (_state == CaptureState.noSignal) {
-          _setState(CaptureState.streaming);
+          _setStateFor(generation, CaptureState.streaming);
         }
         return;
       }
-      // Black. Count it, and only call it a lost signal after a run of them —
-      // the last good frame keeps showing in the meantime.
       _blackStreak++;
       if (_state != CaptureState.noSignal &&
           _blackStreak >= AppConfig.captureBlackStreak) {
-        _setState(CaptureState.noSignal);
+        _setStateFor(generation, CaptureState.noSignal);
       }
     } catch (_) {
       // Sampling is diagnostics; never let it take the stream down.
+    } finally {
+      if (generation == _generation) _signalCheckInFlight = false;
     }
   }
 
-  void _fail(String message) {
+  void _failFor(int generation, String message) {
+    if (!_isActive(generation)) return;
     _error = message;
-    _setState(CaptureState.failed);
+    _setStateFor(generation, CaptureState.failed);
+  }
+
+  void _setStateFor(int generation, CaptureState s) {
+    if (!_isActive(generation)) return;
+    _setState(s);
   }
 
   void _setState(CaptureState s) {
@@ -468,13 +585,17 @@ class CaptureController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _wantRunning = false;
+    _generation++;
     _retryTimer?.cancel();
     _statsTimer?.cancel();
     _stdout?.cancel();
     _stderr?.cancel();
     _proc?.kill(ProcessSignal.sigterm);
+    _proc = null;
+    _queued = null;
     _frame?.dispose();
     _frame = null;
     super.dispose();

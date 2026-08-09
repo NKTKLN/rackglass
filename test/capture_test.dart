@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:promterm/src/capture/capture_controller.dart';
 
@@ -167,6 +169,114 @@ void main() {
     expect(fake.spawned.length, 2);
     expect(fake.spawned.first.killed, isTrue);
     expect(fake.commands.last, containsAllInOrder(['-video_size', '1920x1080']));
+  });
+
+  test('automatic discovery skips a non-capture video node', () async {
+    final fake = FakeCapture(
+      stderrText: '/dev/video0: Not a video capture device',
+      retryDelay: const Duration(milliseconds: 30),
+      devices: const [
+        CaptureDevice('/dev/video0', 'UVC metadata'),
+        CaptureDevice('/dev/video1', 'UVC capture'),
+      ],
+    );
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    fake.spawned.first.exitWith(1);
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(fake.spawned, hasLength(2));
+    expect(fake.controller.device?.path, '/dev/video1');
+    expect(fake.commands.last, contains('/dev/video1'));
+  });
+
+  test('a node that failed once is reconsidered on the next attempt', () async {
+    final fake = FakeCapture(
+      stderrText: '/dev/video0: Not a video capture device',
+      retryDelay: const Duration(milliseconds: 30),
+      devices: const [
+        CaptureDevice('/dev/video0', 'UVC capture'),
+        CaptureDevice('/dev/video1', 'UVC metadata'),
+      ],
+    );
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    // video0 is the real capture node but was busy this once, so the search
+    // moves to video1; video1 is not a capture node either.
+    fake.spawned[0].exitWith(1);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(fake.controller.device?.path, '/dev/video1');
+    fake.spawned[1].exitWith(1);
+
+    // Walking forward only would leave it parked on video1 for good. The next
+    // retry cycle has to come back round to video0.
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(fake.controller.device?.path, '/dev/video0');
+  });
+
+  test('planned restart cannot schedule a retry from the old ffmpeg', () async {
+    final fake = FakeCapture(retryDelay: const Duration(milliseconds: 30));
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+
+    await fake.controller.setMode(const CaptureMode(1920, 1080, 30));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // One original process + one deliberate replacement. The exit callback of
+    // the killed process must not create a third process after retryDelay.
+    expect(fake.spawned.length, 2);
+    expect(fake.controller.state, CaptureState.starting);
+  });
+
+  test('spawn failures are retried while capture is still requested', () async {
+    var attempts = 0;
+    final spawned = <FakeProcess>[];
+    final controller = CaptureController(
+      devices: const [CaptureDevice('/dev/video0', 'test camera')],
+      retryDelay: const Duration(milliseconds: 30),
+      spawn:
+          (
+            String executable,
+            List<String> arguments, {
+            bool runInShell = false,
+            ProcessStartMode mode = ProcessStartMode.normal,
+          }) async {
+            attempts++;
+            if (attempts == 1) throw ProcessException(executable, arguments, 'boom');
+            final p = FakeProcess();
+            spawned.add(p);
+            return p;
+          },
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    expect(controller.state, CaptureState.failed);
+
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(attempts, 2);
+    expect(spawned, hasLength(1));
+    expect(controller.state, CaptureState.starting);
+  });
+
+  test('a decode completing after stop cannot resurrect the stream', () async {
+    final fake = FakeCapture();
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+
+    // This starts asynchronous image decoding; stop immediately while work may
+    // still be in flight. A stale decode used to publish its frame afterwards.
+    fake.latest.emit(stream(litFrame(), 4));
+    await fake.controller.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
+    expect(fake.controller.state, CaptureState.idle);
+    expect(fake.controller.running, isFalse);
+    expect(fake.controller.frame, isNull);
   });
 
   test('garbage on the pipe is counted, not fatal', () async {
