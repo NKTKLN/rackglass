@@ -8,6 +8,7 @@ class TempReading {
     required this.sensor,
     required this.label,
     required this.celsius,
+    this.named = true,
   });
 
   final String instance;
@@ -17,6 +18,11 @@ class TempReading {
   /// `Tctl`, `Tccd1`, … or the raw sensor id when the chip exposes no label.
   final String label;
   final double celsius;
+
+  /// Whether node_exporter gave this channel a name of its own. An unnamed
+  /// `temp0` is a raw hwmon index that means nothing without its datasheet:
+  /// worth listing in full on NODES, not worth a line on DASH.
+  final bool named;
 
   /// Short chip name for display: the hwmon path tail rather than the full id.
   String get chipShort {
@@ -110,12 +116,12 @@ class GpuStat {
     required this.gpu,
     required this.instance,
     required this.model,
+    this.uuid,
     required this.exporterUp,
     this.ageSeconds,
     this.temp,
     this.memTemp,
     this.util,
-    this.memCopyUtil,
     this.fbUsedMiB,
     this.fbFreeMiB,
     this.powerWatts,
@@ -126,6 +132,9 @@ class GpuStat {
   final String gpu;
   final String instance;
   final String model;
+  final String? uuid;
+
+  String get key => '$instance/${uuid ?? gpu}';
 
   /// `up` for the dcgm scrape target right now.
   final bool exporterUp;
@@ -136,7 +145,6 @@ class GpuStat {
   final double? temp;
   final double? memTemp;
   final double? util;
-  final double? memCopyUtil;
   final double? fbUsedMiB;
   final double? fbFreeMiB;
   final double? powerWatts;
@@ -170,6 +178,11 @@ class GpuStat {
       model.replaceFirst(RegExp(r'^(NVIDIA|Tesla)\s+'), '');
 }
 
+/// How hard a target is being pushed, worst-of across everything measured for
+/// it. Reachability is a separate axis: a target that is down reports no load
+/// at all, which is not the same as being idle.
+enum NodeHealth { unknown, ok, warn, critical }
+
 /// One complete poll of the cluster.
 class Snapshot {
   const Snapshot({
@@ -195,12 +208,45 @@ class Snapshot {
     return null;
   }
 
+  List<GpuStat> gpusFor(String instance) => [
+    for (final g in gpus)
+      if (g.instance == instance) g,
+  ];
+
+  List<TempReading> tempsFor(String instance) => [
+    for (final t in temps)
+      if (t.instance == instance) t,
+  ];
+
+  /// Worst reading across CPU, memory, root fs and any live GPU on the target.
+  /// Stale GPU numbers are left out: an exporter that has been down for a day
+  /// must not keep a target amber on yesterday's utilisation.
+  NodeHealth healthOf(NodeStat n) {
+    if (!n.up) return NodeHealth.unknown;
+    final readings = <double>[
+      if (n.cpuPct != null) n.cpuPct!,
+      if (n.memPct != null) n.memPct!,
+      if (n.fsPct != null) n.fsPct!,
+      for (final g in gpusFor(n.instance))
+        if (!g.stale) ...[
+          if (g.util != null) g.util!,
+          if (g.fbPct != null) g.fbPct!,
+        ],
+    ];
+    if (readings.isEmpty) return NodeHealth.unknown;
+    final worst = readings.reduce((a, b) => a > b ? a : b);
+    if (worst >= AppConfig.loadCritical) return NodeHealth.critical;
+    if (worst >= AppConfig.loadWarn) return NodeHealth.warn;
+    return NodeHealth.ok;
+  }
+
   List<NodeStat> get vms => [for (final n in nodes) if (!n.isHypervisor) n];
 
   int get targetsDown => nodes.where((n) => !n.up).length;
 
-  /// The named CPU package temperature, preferring `Tctl` (AMD) then `Package`
-  /// (Intel), falling back to the hottest labelled sensor on the host.
+  /// The named CPU package temperature, preferring canonical AMD/Intel package
+  /// labels. If node_exporter does not identify a package sensor, return null
+  /// rather than guessing that the hottest unrelated hwmon device is the CPU.
   TempReading? get cpuPackageTemp {
     final hostTemps = temps
         .where((t) => t.instance == AppConfig.hypervisor)
@@ -211,8 +257,7 @@ class Snapshot {
         if (t.label == want) return t;
       }
     }
-    hostTemps.sort((a, b) => b.celsius.compareTo(a.celsius));
-    return hostTemps.first;
+    return null;
   }
 
   /// Labelled host temperatures other than the package one.
@@ -220,12 +265,13 @@ class Snapshot {
     final pkg = cpuPackageTemp;
     return [
       for (final t in temps)
-        if (t.instance == AppConfig.hypervisor && t != pkg) t,
+        if (t.instance == AppConfig.hypervisor && t != pkg && t.named) t,
     ];
   }
 
-  /// Memory committed to running guests, versus what the host physically has.
-  double get vmMemAllocated =>
+  /// Sum of guest OS-reported physical memory. This is not a Proxmox
+  /// allocation/commitment metric and is deliberately named as such.
+  double get vmMemReportedTotal =>
       vms.fold(0.0, (sum, n) => sum + (n.memTotal ?? 0));
 
   double get vmMemUsed => vms.fold(0.0, (sum, n) => sum + (n.memUsed ?? 0));

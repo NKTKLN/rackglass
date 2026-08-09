@@ -22,6 +22,33 @@ class AppConfig {
   /// Number of polled samples kept in memory for the inline sparklines.
   static const historyDepth = 120;
 
+  /// Utilisation thresholds, shared by the bar colours and by the per-target
+  /// health glyph on NODES. One definition, so a red bar and a red glyph
+  /// always mean the same thing.
+  static const loadWarn = 75.0;
+  static const loadCritical = 90.0;
+
+  /// Snapshot values older than this are visibly marked stale. A transient
+  /// failed poll may keep the last good values on screen, but never indefinitely
+  /// as if they were current.
+  static const snapshotStaleAfter = Duration(seconds: 15);
+
+  /// Range charts are refreshed while their screen is visible.
+  static const rangeRefresh = Duration(minutes: 1);
+
+  /// Historical DCGM fallback scans up to seven days of TSDB data. While an
+  /// exporter is down, refresh that cache slowly instead of rerunning the
+  /// expensive scans on every five-second node poll.
+  static const gpuFallbackRefresh = Duration(minutes: 1);
+
+  /// Virtual Linux interfaces are excluded from aggregate throughput so the
+  /// same bridged packet is not counted on a physical NIC, bridge and tap/veth.
+  /// Override for unusual network topologies at build time.
+  static const netDeviceExclude = String.fromEnvironment(
+    'NET_DEVICE_EXCLUDE',
+    defaultValue: r'^(lo|veth.*|tap.*|fwbr.*|fwln.*|fwpr.*|vmbr.*|docker.*|br-.*|virbr.*)$',
+  );
+
   /// The node_exporter instance that is the hypervisor itself; everything else
   /// discovered under job="node" is treated as a guest VM.
   static const hypervisor = 'pve-host';

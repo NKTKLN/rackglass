@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
+import '../config.dart';
 import '../prom/prom_client.dart';
 import '../prom/queries.dart';
 import '../state/metrics_store.dart';
@@ -19,9 +22,14 @@ const _windows = <(String, Duration)>[
 
 /// Four range-query charts on a 2x2 grid: CPU, temperature, memory, network.
 class GraphsScreen extends StatefulWidget {
-  const GraphsScreen({super.key, required this.store});
+  const GraphsScreen({
+    super.key,
+    required this.store,
+    required this.active,
+  });
 
   final MetricsStore store;
+  final bool active;
 
   @override
   State<GraphsScreen> createState() => _GraphsScreenState();
@@ -29,50 +37,90 @@ class GraphsScreen extends StatefulWidget {
 
 class _GraphsScreenState extends State<GraphsScreen> {
   int _windowIndex = 1;
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
+  int _loadId = 0;
+  Timer? _refreshTimer;
+  DateTime? _queryEnd;
 
   List<PromSeries> _cpu = const [];
   List<PromSeries> _cpuTemp = const [];
   List<PromSeries> _gpuTemp = const [];
   List<PromSeries> _gpuUtil = const [];
   List<PromSeries> _mem = const [];
-  List<PromSeries> _netRx = const [];
+  List<PromSeries> _speedtest = const [];
 
   Duration get _window => _windows[_windowIndex].$2;
 
   @override
   void initState() {
     super.initState();
+    if (widget.active) _activate();
+  }
+
+  @override
+  void didUpdateWidget(GraphsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _activate();
+    } else if (!widget.active && oldWidget.active) {
+      _loadId++;
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _activate() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(AppConfig.rangeRefresh, (_) {
+      if (widget.active && !_loading) _load();
+    });
     _load();
   }
 
   Future<void> _load() async {
+    if (!widget.active) return;
+    final requestId = ++_loadId;
+    final window = _window;
+    final queryEnd = DateTime.now();
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final r = await Future.wait([
-        widget.store.loadRange(Q.rangeCpu, _window),
-        widget.store.loadRange(Q.rangeTempCpu, _window),
-        widget.store.loadRange(Q.rangeTempGpu, _window),
-        widget.store.loadRange(Q.rangeGpuUtil, _window),
-        widget.store.loadRange(Q.rangeMemPct, _window),
-        widget.store.loadRange(Q.rangeNetRx, _window),
+        widget.store.loadRange(Q.rangeCpu, window, end: queryEnd),
+        widget.store.loadRange(Q.rangeTempCpu, window, end: queryEnd),
+        widget.store.loadRange(Q.rangeTempGpu, window, end: queryEnd),
+        widget.store.loadRange(Q.rangeGpuUtil, window, end: queryEnd),
+        widget.store.loadRange(Q.rangeMemPct, window, end: queryEnd),
+        widget.store.loadRange(Q.rangeSpeedtestDown, window, end: queryEnd),
       ]);
-      if (!mounted) return;
+      if (!mounted ||
+          !widget.active ||
+          requestId != _loadId ||
+          window != _window) {
+        return;
+      }
       setState(() {
         _cpu = r[0];
         _cpuTemp = r[1];
         _gpuTemp = r[2];
         _gpuUtil = r[3];
         _mem = r[4];
-        _netRx = r[5];
+        _speedtest = r[5];
+        _queryEnd = queryEnd;
         _loading = false;
       });
+      _assignColors();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || !widget.active || requestId != _loadId) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -80,23 +128,57 @@ class _GraphsScreenState extends State<GraphsScreen> {
     }
   }
 
-  /// Assigns a stable color per instance so a given VM keeps its color across
-  /// every chart on the screen.
-  Color _colorFor(String key) {
-    final order = _instanceOrder;
-    final i = order.indexOf(key);
-    return TC.seriesAt(i < 0 ? order.length : i);
+  /// Colors are handed out once per key and then remembered, so an instance
+  /// keeps its color when another one appears or drops out mid-session. A hash
+  /// would be stable too, but two instances could land on the same bucket with
+  /// nothing to resolve it; a register cannot collide until the palette runs
+  /// out, and it is walked in sorted order so a restart reproduces it.
+  final Map<String, Color> _nodeColors = {};
+  final Map<String, Color> _gpuColors = {};
+  final Map<String, Color> _pathColors = {};
+
+  void _assignColors() {
+    final nodes = <String>{
+      for (final s in _cpu) s.instance ?? '?',
+      for (final s in _mem) s.instance ?? '?',
+    }.toList()..sort();
+    for (final key in nodes) {
+      _nodeColors.putIfAbsent(
+        key,
+        () => TC.nodeSeriesAt(_nodeColors.length),
+      );
+    }
+
+    final gpus = <String>{
+      for (final s in [..._gpuUtil, ..._gpuTemp]) _gpuKey(s),
+    }.toList()..sort();
+    for (final key in gpus) {
+      _gpuColors.putIfAbsent(key, () => TC.gpuSeriesAt(_gpuColors.length));
+    }
+
+    final paths = <String>{for (final s in _speedtest) _pathOf(s)}.toList()
+      ..sort();
+    for (final key in paths) {
+      _pathColors.putIfAbsent(key, () => TC.nodeSeriesAt(_pathColors.length));
+    }
   }
 
-  List<String> get _instanceOrder {
-    final names = <String>{for (final s in _cpu) s.instance ?? '?'}.toList()
-      ..sort();
-    return names;
-  }
+  /// Which route the measurement went over — the exporter runs the same test
+  /// direct and through the proxy, and the gap between them is the point.
+  String _pathOf(PromSeries s) => s.labels['path'] ?? 'direct';
+
+  /// One card, whichever metric it arrived on. dcgm-exporter carries a UUID
+  /// per GPU; the index is only a fallback for exporters that omit it.
+  String _gpuKey(PromSeries s) =>
+      '${s.instance ?? "?"}/${s.labels["UUID"] ?? s.labels["gpu"] ?? "0"}';
+
+  Color _nodeColor(String instance) => _nodeColors[instance] ?? TC.dim;
+
+  Color _gpuColor(PromSeries s) => _gpuColors[_gpuKey(s)] ?? TC.amber;
 
   List<ChartSeries> _byInstance(List<PromSeries> series) => [
     for (final s in series)
-      ChartSeries(s.instance ?? '?', s.points, _colorFor(s.instance ?? '?')),
+      ChartSeries(s.instance ?? '?', s.points, _nodeColor(s.instance ?? '?')),
   ];
 
   @override
@@ -109,6 +191,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
           error: _error,
           step: MetricsStore.stepFor(_window),
           onPick: (i) {
+            if (i == _windowIndex) return;
             setState(() => _windowIndex = i);
             _load();
           },
@@ -124,20 +207,24 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'utilisation %',
-                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(
+                          6,
+                          TermPanel.titleGutter,
+                          8,
+                          4,
+                        ),
                         child: TermChart(
-                          // GPU util belongs here rather than next to a byte
-                          // rate: everything on this axis is a percentage.
                           series: [
                             ..._byInstance(_cpu),
                             for (final s in _gpuUtil)
                               ChartSeries(
                                 'gpu${s.labels["gpu"] ?? "0"}',
                                 s.points,
-                                TC.amber,
+                                _gpuColor(s),
                               ),
                           ],
                           window: _window,
+                          endTime: _queryEnd,
                           unit: '%',
                           yMin: 0,
                         ),
@@ -147,10 +234,16 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'memory used %',
-                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(
+                          6,
+                          TermPanel.titleGutter,
+                          8,
+                          4,
+                        ),
                         child: TermChart(
                           series: _byInstance(_mem),
                           window: _window,
+                          endTime: _queryEnd,
                           unit: '%',
                           yMin: 0,
                           yMax: 100,
@@ -167,12 +260,17 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     Expanded(
                       child: TermPanel(
                         title: 'temperature °c',
-                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
+                        padding: const EdgeInsets.fromLTRB(
+                          6,
+                          TermPanel.titleGutter,
+                          8,
+                          4,
+                        ),
                         child: TermChart(
                           series: [
                             for (final s in _cpuTemp)
                               ChartSeries(
-                                'cpu ${s.labels["label"] ?? s.labels["sensor"]}',
+                                'cpu ${s.labels["label"] ?? s.labels["sensor"] ?? "?"}',
                                 s.points,
                                 s.labels['label'] == 'Tctl' ? TC.fg : TC.cyan,
                               ),
@@ -180,10 +278,11 @@ class _GraphsScreenState extends State<GraphsScreen> {
                               ChartSeries(
                                 'gpu${s.labels["gpu"] ?? "0"}',
                                 s.points,
-                                TC.amber,
+                                _gpuColor(s),
                               ),
                           ],
                           window: _window,
+                          endTime: _queryEnd,
                           unit: '°',
                         ),
                       ),
@@ -191,26 +290,32 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     const SizedBox(height: 6),
                     Expanded(
                       child: TermPanel(
-                        title: 'network rx · kb/s',
-                        padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 8, 4),
+                        title: 'speedtest down · Mbit/s',
+                        padding: const EdgeInsets.fromLTRB(
+                          6,
+                          TermPanel.titleGutter,
+                          8,
+                          4,
+                        ),
                         child: TermChart(
-                          // Its own panel and its own axis: a few KB/s would be
-                          // a flat line at zero if it shared one with a 0-100
-                          // percentage.
                           series: [
-                            for (final s in _netRx)
+                            for (final s in _speedtest)
                               ChartSeries(
-                                s.instance ?? '?',
+                                _pathOf(s),
                                 [
+                                  // The exporter reports bits; the number
+                                  // people quote for a link is Mbit/s decimal.
                                   for (final p in s.points)
-                                    PromPoint(p.t, p.v / 1024),
+                                    PromPoint(p.t, p.v / 1e6),
                                 ],
-                                _colorFor(s.instance ?? '?'),
+                                _pathColors[_pathOf(s)] ?? TC.fg,
                               ),
                           ],
                           window: _window,
-                          unit: 'K',
+                          endTime: _queryEnd,
+                          unit: 'M',
                           yMin: 0,
+                          emptyMessage: 'NO SPEEDTEST RESULTS IN RANGE',
                         ),
                       ),
                     ),
@@ -248,7 +353,10 @@ class _WindowBar extends StatelessWidget {
       height: 30,
       child: Row(
         children: [
-          Text('RANGE', style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2)),
+          Text(
+            'RANGE',
+            style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1.2),
+          ),
           const SizedBox(width: 8),
           for (var i = 0; i < _windows.length; i++) ...[
             _PickButton(
@@ -265,11 +373,13 @@ class _WindowBar extends StatelessWidget {
           ),
           const Spacer(),
           if (error != null)
-            Text(
-              'RANGE QUERY FAILED: $error',
-              style: ts(size: TZ.caption, color: TC.red),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: Text(
+                'RANGE QUERY FAILED: $error',
+                style: ts(size: TZ.caption, color: TC.red),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             )
           else
             Text(
@@ -301,7 +411,6 @@ class _PickButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        // Generous padding: this is driven by a finger on a 7" panel.
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           border: Border.all(color: selected ? TC.bright : TC.border),

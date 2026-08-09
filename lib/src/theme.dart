@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'config.dart';
+
 /// Plain Linux console palette: black background, grey-white text, ANSI colors
 /// used only to carry meaning. No phosphor wash, no bloom.
 abstract final class TC {
@@ -27,17 +29,25 @@ abstract final class TC {
   static const red = Color(0xFFE05A4F);
   static const magenta = Color(0xFFBE72C8);
   static const blue = Color(0xFF6E90D8);
+  static const orange = Color(0xFFE08A3C);
 
-  /// Series colors for multi-line charts, in assignment order.
-  static const series = <Color>[fg, cyan, amber, magenta, blue, green];
+  /// Series colors for per-node chart lines, in assignment order. The amber
+  /// family is deliberately absent: GPU lines are drawn in it, and a node that
+  /// borrowed amber would be indistinguishable from the GPU on a shared axis.
+  static const nodeSeries = <Color>[fg, cyan, magenta, blue, green];
 
-  static Color seriesAt(int i) => series[i % series.length];
+  static Color nodeSeriesAt(int i) => nodeSeries[i % nodeSeries.length];
 
-  /// Percentage severity: normal text under 75, yellow to 90, red above.
+  /// GPU chart lines. The first card keeps the amber it has always had.
+  static const gpuSeries = <Color>[amber, orange];
+
+  static Color gpuSeriesAt(int i) => gpuSeries[i % gpuSeries.length];
+
+  /// Percentage severity, on the thresholds in [AppConfig].
   static Color forPct(double? pct) {
     if (pct == null) return dim;
-    if (pct >= 90) return red;
-    if (pct >= 75) return amber;
+    if (pct >= AppConfig.loadCritical) return red;
+    if (pct >= AppConfig.loadWarn) return amber;
     return fg;
   }
 

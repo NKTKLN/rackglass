@@ -38,12 +38,16 @@ void main() {
     WidgetTester tester, {
     bool gpuUp = false,
     bool failEverything = false,
+    FakePrometheus? prometheus,
+    FakeCapture? fakeCapture,
   }) async {
     tester.view.physicalSize = _panel;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final fake = FakePrometheus(gpuUp: gpuUp, failEverything: failEverything);
+    final fake =
+        prometheus ??
+        FakePrometheus(gpuUp: gpuUp, failEverything: failEverything);
     final store = MetricsStore(
       client: PromClient(
         baseUrl: 'http://fake:9090',
@@ -52,7 +56,7 @@ void main() {
     );
     addTearDown(store.dispose);
     // A real ffmpeg would be spawned the moment CAPTURE is selected.
-    final capture = FakeCapture().controller;
+    final capture = (fakeCapture ?? FakeCapture()).controller;
     addTearDown(capture.dispose);
     // Unmount before the test ends so the header clock and the blinking cursor
     // are disposed; otherwise they trip the pending-timer/ticker check.
@@ -214,17 +218,27 @@ void main() {
     }
   });
 
-  testWidgets('graphs mode issues range queries and draws them', (
+  testWidgets('graphs mode loads history lazily and draws it', (
     tester,
   ) async {
-    await pumpApp(tester);
+    final prometheus = FakePrometheus();
+    await pumpApp(tester, prometheus: prometheus);
+
+    // IndexedStack keeps the screen alive, but an unopened GRAPHS tab must not
+    // issue six expensive range queries during app startup.
+    expect(prometheus.rangeCalls, 0);
+
     await tester.tap(find.text('GRAPHS'));
+    // One frame activates the screen and issues the queries; the next one
+    // paints what came back.
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
 
+    expect(prometheus.rangeCalls, greaterThanOrEqualTo(6));
     expect(find.text('UTILISATION %'), findsOneWidget);
     expect(find.text('TEMPERATURE °C'), findsOneWidget);
     expect(find.text('MEMORY USED %'), findsOneWidget);
-    expect(find.text('NETWORK RX · KB/S'), findsOneWidget);
+    expect(find.text('SPEEDTEST DOWN · MBIT/S'), findsOneWidget);
     expect(find.text('NO DATA IN RANGE'), findsNothing);
 
     // Switching the window re-queries at a coarser step.
@@ -243,14 +257,46 @@ void main() {
 
     // Hypervisor is selected by default.
     expect(find.text('PVE-HOST · HYPERVISOR'), findsOneWidget);
+    // temp7 has no node_hwmon_sensor_label in the fake response. Raw hwmon
+    // channels must still be visible rather than being lost in the label join.
+    expect(find.text('temp7'), findsOneWidget);
+    expect(find.text('HWMON SENSORS'), findsOneWidget);
 
     await tester.tap(find.text('vm-node-1'));
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('VM-NODE-1 · NODES'), findsOneWidget);
-    expect(find.text('HWMON SENSORS'), findsOneWidget);
-    // Guests export no hwmon sensors; say so rather than showing an empty gap.
-    expect(find.text('none exported by this target'), findsOneWidget);
+    // A guest exports no hwmon chip. The section is dropped rather than kept
+    // as a heading over an apology.
+    expect(find.text('HWMON SENSORS'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('nodes mode handles an empty node target set', (tester) async {
+    final prometheus = FakePrometheus(noNodeTargets: true);
+    await pumpApp(tester, prometheus: prometheus);
+
+    await tester.tap(find.text('NODES'));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('NO NODE TARGETS'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('fullscreen does not respawn the capture process', (tester) async {
+    final capture = FakeCapture();
+    await pumpApp(tester, fakeCapture: capture);
+
+    await tester.tap(find.text('CAPTURE'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(capture.spawned, hasLength(1));
+
+    await tester.tap(find.text('FULLSCREEN'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(capture.spawned, hasLength(1));
+
+    await tester.tap(find.text('EXIT FULL'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(capture.spawned, hasLength(1));
   });
 
   testWidgets('a dead Prometheus surfaces the error instead of blank panels', (

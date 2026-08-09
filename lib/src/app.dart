@@ -54,10 +54,6 @@ class _PromTermAppState extends State<PromTermApp> {
   /// cost 15% of the height, which is worth reclaiming for video.
   bool _videoFull = false;
 
-  // The GRAPHS screen owns expensive range queries, so it is kept alive across
-  // tab switches instead of being rebuilt from scratch each time.
-  late final Widget _graphs = GraphsScreen(store: _store);
-
   @override
   void initState() {
     super.initState();
@@ -103,10 +99,11 @@ class _PromTermAppState extends State<PromTermApp> {
     } else if (k == LogicalKeyboardKey.keyR) {
       _store.refresh();
     } else if (k == LogicalKeyboardKey.escape && _videoFull) {
-      // Escape leaves fullscreen before it means quit.
+      // Escape only ever leaves fullscreen. It does not quit: on a kiosk panel
+      // the app is meant to stay up, and a stray Escape closing the whole
+      // dashboard is not a recoverable mistake from the front of the box.
       setState(() => _videoFull = false);
-    } else if (k == LogicalKeyboardKey.keyQ ||
-        k == LogicalKeyboardKey.escape) {
+    } else if (k == LogicalKeyboardKey.keyQ) {
       SystemNavigator.pop();
     }
   }
@@ -155,40 +152,58 @@ class _PromTermAppState extends State<PromTermApp> {
   }
 
   Widget _screen() {
-    if (_videoFull && _mode == AppMode.capture) return _body();
+    final videoFull = _videoFull && _mode == AppMode.capture;
     return AnimatedBuilder(
       animation: _store,
-      builder: (context, _) => Column(
+      builder: (context, _) => Stack(
         children: [
-          _TopBar(
-            mode: _mode,
-            onPick: (m) => setState(() {
-              _mode = m;
-              if (m != AppMode.capture) _videoFull = false;
-            }),
+          // Keep this exact subtree mounted while fullscreen changes. Moving
+          // CAPTURE between two unrelated parent trees used to dispose/start
+          // it on every fullscreen toggle, racing the ffmpeg lifecycle.
+          Positioned(
+            left: videoFull ? 0 : 6,
+            right: videoFull ? 0 : 6,
+            top: videoFull ? 0 : Chrome.top + 6,
+            bottom: videoFull ? 0 : Chrome.status + 4,
+            child: _body(),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
-              child: _body(),
+          if (!videoFull)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: Chrome.top,
+              child: _TopBar(
+                mode: _mode,
+                onPick: (m) => setState(() {
+                  _mode = m;
+                  if (m != AppMode.capture) _videoFull = false;
+                }),
+              ),
             ),
-          ),
-          _StatusBar(store: _store),
+          if (!videoFull)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: Chrome.status,
+              child: _StatusBar(store: _store),
+            ),
         ],
       ),
     );
   }
 
   Widget _body() {
-    // IndexedStack rather than a switch: keeps each screen's state (selected
-    // node, loaded range data) alive while you flip between modes.
+    // IndexedStack keeps screen state alive, while each history screen receives
+    // an explicit active flag so expensive range queries only run when visible.
     return IndexedStack(
       index: _mode.index,
       sizing: StackFit.expand,
       children: [
         DashboardScreen(store: _store),
-        _graphs,
-        NodesScreen(store: _store),
+        GraphsScreen(store: _store, active: _mode == AppMode.graphs),
+        NodesScreen(store: _store, active: _mode == AppMode.nodes),
         CaptureScreen(
           controller: _capture,
           active: _mode == AppMode.capture,
@@ -304,6 +319,7 @@ class _StatusBarState extends State<_StatusBar> {
   Widget build(BuildContext context) {
     final s = widget.store;
     final ok = s.healthy;
+    final stale = s.stale;
     final snap = s.snapshot;
     final now = DateTime.now();
     return Container(
@@ -316,10 +332,10 @@ class _StatusBarState extends State<_StatusBar> {
           _Field(
             label: 'status',
             child: Text(
-              ok ? 'online' : 'offline',
+              !ok ? 'offline' : (stale ? 'stale' : 'online'),
               style: ts(
                 size: TZ.small,
-                color: ok ? TC.green : TC.red,
+                color: !ok ? TC.red : (stale ? TC.amber : TC.green),
                 weight: FontWeight.w700,
               ),
             ),

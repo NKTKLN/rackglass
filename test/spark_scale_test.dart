@@ -57,5 +57,11 @@ void main() {
     test('under three samples the strip stays an empty track', () {
       expect(sparkText([12.0, 12.0], 6, min: 0, max: 100), '······');
     });
+
+    test('missing samples remain visible as gaps', () {
+      final strip = sparkText([10.0, 20.0, null, 30.0, 40.0], 5, min: 0, max: 100);
+      expect(strip[2], '·');
+      expect(strip.length, 5);
+    });
   });
 }

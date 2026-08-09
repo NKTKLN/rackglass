@@ -98,7 +98,7 @@ class SparkText extends StatelessWidget {
   }) : min = 0,
        max = 100;
 
-  final List<double> values;
+  final List<double?> values;
   final int? width;
   final double size;
   final Color color;

@@ -12,10 +12,10 @@ dcgm-exporter.
 
 | Key | Mode | What's on it |
 | --- | --- | --- |
-| `1` | **DASH** | Host CPU package temp + labelled hwmon sensors, CPU usage, load; GPU temp/util/VRAM/power; host memory and swap with the VM memory budget; one row per scrape target with CPU%, memory, sparklines, load, root fs, network, iowait, uptime |
-| `2` | **GRAPHS** | Four range-query charts (CPU %, memory %, temperatures, GPU util + network) over 15m / 1h / 6h / 24h / 7d |
-| `3` | **NODES** | Master/detail per target: CPU, memory, root fs, network, boot time, full hwmon sensor list |
-| `4` | **CAPTURE** | Live view from the USB capture card: FIT / 1:1 / 2:1 with drag to pan, fullscreen, frame stats, and a no-signal banner for when the card streams black |
+| `1` | **DASH** | Host CPU package temp + hwmon sensors, CPU usage, load; GPU temp/util/VRAM/power; host memory and swap with the guest-reported RAM sum; one row per scrape target with CPU%, memory, sparklines, load, root fs, network, iowait, uptime |
+| `2` | **GRAPHS** | Four range-query charts (CPU %, memory %, temperatures, speedtest download) over 15m / 1h / 6h / 24h / 7d |
+| `3` | **NODES** | Master/detail per target: CPU, memory, root fs, network, boot time, a GPU section and hwmon list where the target has them, and separate CPU / memory / temperature / GPU history charts |
+| `4` | **CAPTURE** | Live view from the USB capture card, letterboxed to fit: fullscreen, frame stats, and a no-signal banner for when the card streams black |
 
 Other keys: `←` `→` cycle modes, `r` force a refresh, `q` / `Esc` quit. Every
 tab and button is also a touch target sized for a finger on a 7" screen.
@@ -44,6 +44,15 @@ Point it somewhere else at build time:
 
 ```sh
 flutter run -d linux --dart-define=PROM_URL=http://10.0.0.5:9090
+```
+
+Network totals exclude loopback and common virtual/bridge devices by default
+(`veth*`, `tap*`, `fw*`, `vmbr*`, Docker/libvirt bridges) so forwarded traffic
+is not counted twice on a Proxmox host. Override the regex at build time when
+your interface topology differs:
+
+```sh
+flutter run -d linux --dart-define=NET_DEVICE_EXCLUDE='^(lo|docker.*)$'
 ```
 
 ### On the panel
@@ -107,17 +116,22 @@ is on screen and stops when it leaves.
 
 A capture card with nothing on its HDMI input streams valid black frames
 forever, which is indistinguishable from a broken app, so the frame is
-downscaled to 32x18 and averaged. The picture has to stay black for a full
-second before the banner appears — a fade or one dark scene is not a lost
-signal — while the last good frame keeps showing. A returning source clears it
+downscaled to 32x18 and averaged. The picture has to stay black for roughly three
+seconds (30 sampled frames) before the banner appears — a fade or one dark
+scene is not a lost signal — while the last good frame keeps showing. A returning source clears it
 with no hold at all.
 
 ## Handling missing data
 
 The GPU exporter on this cluster is frequently down. Rather than blanking the
-panel or showing a misleading `0`, GPU metrics are read through
-`last_over_time(...[7d])` and paired with a staleness age computed from a
-two age queries. `timestamp()` loses the original sample time when it passes
+panel or showing a misleading `0`, current DCGM metrics are used while the
+exporter is healthy and `last_over_time(...[7d])` is only used while that
+exporter is down. The expensive seven-day fallback scans are cached for one
+minute while the same exporter remains down, instead of being rerun on every
+five-second poll. That distinction matters: a single metric disappearing from
+a healthy exporter must render `--`, not yesterday's value as if it were live.
+Historical fallback values are paired with a staleness age computed from two
+age queries. `timestamp()` loses the original sample time when it passes
 through `last_over_time`, so the age needs its own expression — but a subquery
 only evaluates on its own step boundaries, so its answer sawtooths from zero to
 a full step. Measured against the live server it swung 0..300s while the true
@@ -126,9 +140,11 @@ fresh series is therefore timed exactly with `time() - timestamp()`, and the
 subquery is kept only for one that stopped long enough ago to fall out of the
 lookback window, where minutes do not matter.
 
-A stale panel is drawn amber, badged `[ DOWN ]`, and states how old the readings
-are. The same rule applies everywhere: a metric with no series renders `--`,
-never `0`.
+A stale GPU panel is drawn amber, badged `[ DOWN ]`, and states how old the
+readings are. Cluster snapshots are also age-checked: after 15 seconds without a
+successful poll the dashboard is visibly dimmed and marked `STALE` instead of
+presenting the last good values as current. The same rule applies everywhere: a
+metric with no series renders `--`, never `0`.
 
 ## Tests
 

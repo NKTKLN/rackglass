@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:promterm/src/prom/queries.dart';
 
 /// A stand-in Prometheus built from real responses captured off the live server
 /// (Proxmox host + 4 guests, a Tesla V100 whose dcgm-exporter is down).
@@ -9,10 +10,15 @@ import 'package:http/testing.dart';
 /// [gpuUp] flips the GPU exporter between live and long-dead so both branches of
 /// the GPU panel can be rendered in tests.
 class FakePrometheus {
-  FakePrometheus({this.gpuUp = false, this.failEverything = false});
+  FakePrometheus({
+    this.gpuUp = false,
+    this.failEverything = false,
+    this.noNodeTargets = false,
+  });
 
   final bool gpuUp;
-  final bool failEverything;
+  bool failEverything;
+  final bool noNodeTargets;
 
   int instantCalls = 0;
   int rangeCalls = 0;
@@ -136,6 +142,18 @@ class FakePrometheus {
 
   List<Map<String, dynamic>> _instantFor(String q) {
     if (q == 'up') {
+      if (noNodeTargets) {
+        return [
+          {
+            'metric': {
+              '__name__': 'up',
+              'instance': 'localhost:9090',
+              'job': 'prometheus',
+            },
+            'value': [_now, '1'],
+          },
+        ];
+      }
       return [
         ..._vector({for (final k in _nodes.keys) k: 1}, name: 'up'),
         {
@@ -166,7 +184,16 @@ class FakePrometheus {
         },
       ];
     }
-    if (q.contains('node_hwmon_sensor_label')) {
+    if (q == Q.allTemps) {
+      return [
+        _temp('Tctl', 'temp1', 43.375),
+        _temp('Tccd1', 'temp3', 46.5),
+        // No node_hwmon_sensor_label series for this channel. The PromQL left
+        // join keeps it with its raw sensor id.
+        _rawTemp('temp7', 39.25),
+      ];
+    }
+    if (q == Q.cpuTemp) {
       return [
         _temp('Tctl', 'temp1', 43.375),
         _temp('Tccd1', 'temp3', 46.5),
@@ -200,8 +227,8 @@ class FakePrometheus {
       return _vector({for (final k in _nodes.keys) k: 1103.31});
     }
 
-    // GPU. Values come back through last_over_time even while the target is
-    // down, which is exactly the case the UI has to handle.
+    // GPU. The fake answers both fresh selectors and historical fallback
+    // expressions; MetricsStore decides which branch may be used based on `up`.
     if (q.contains('DCGM_FI_DEV_GPU_TEMP')) {
       if (q.startsWith('time()')) {
         return _gpuVector('gpu_age', gpuUp ? 12.0 : 166055.5);
@@ -256,6 +283,25 @@ class FakePrometheus {
         ],
       };
     }
+    if (q.contains('speedtest_download')) {
+      return {
+        'resultType': 'matrix',
+        'result': [
+          for (final (path, base) in [('direct', 222.0e6), ('socks', 165.0e6)])
+            {
+              'metric': {
+                'instance': 'vm-ops-node',
+                'job': 'node',
+                'path': path,
+              },
+              'values': [
+                for (var i = 60; i >= 0; i--)
+                  [end - i * 60, (base + (i % 5) * 1.0e6).toStringAsFixed(0)],
+              ],
+            },
+        ],
+      };
+    }
     if (q.contains('node_hwmon')) {
       return {
         'resultType': 'matrix',
@@ -299,4 +345,16 @@ class FakePrometheus {
     },
     'value': [_now, c.toString()],
   };
+  Map<String, dynamic> _rawTemp(String sensor, double c) => {
+    'metric': {
+      '__name__': 'node_hwmon_temp_celsius',
+      'instance': 'pve-host',
+      'job': 'node',
+      'role': 'hypervisor',
+      'chip': 'pci0000:00_0000:00:18_3',
+      'sensor': sensor,
+    },
+    'value': [_now, c.toString()],
+  };
+
 }

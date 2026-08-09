@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../model/snapshot.dart';
@@ -32,7 +34,7 @@ class DashboardScreen extends StatelessWidget {
       );
     }
 
-    return Column(
+    final content = Column(
       children: [
         SizedBox(
           height: _panelRow,
@@ -48,6 +50,30 @@ class DashboardScreen extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Expanded(child: _NodeTable(snap: snap, store: store)),
+      ],
+    );
+
+    if (!store.stale) return content;
+    return Stack(
+      children: [
+        Positioned.fill(child: Opacity(opacity: 0.42, child: content)),
+        Positioned(
+          top: 6,
+          right: 8,
+          child: Container(
+            color: TC.bg,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              'STALE · LAST GOOD ${fmtDuration(store.snapshotAge)} AGO',
+              style: ts(
+                size: TZ.caption,
+                color: TC.amber,
+                weight: FontWeight.w700,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -394,9 +420,12 @@ class _MemoryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final host = snap.host;
     final total = host?.memTotal;
-    final allocPct = (total != null && total > 0)
-        ? snap.vmMemAllocated / total * 100
+    final guestsReportingRam = snap.vms.where((n) => n.memTotal != null).length;
+    final guestTotalPct =
+        (guestsReportingRam > 0 && total != null && total > 0)
+        ? snap.vmMemReportedTotal / total * 100
         : null;
+    final guestsReportingUsed = snap.vms.where((n) => n.memUsed != null).length;
 
     return TermPanel(
       title: 'memory',
@@ -420,17 +449,18 @@ class _MemoryPanel extends StatelessWidget {
             size: TZ.body,
           ),
           StatLine(
-            // The overcommit ratio matters more than a second bar would, and
-            // costs one line instead of three.
-            label: 'VM ALLOCATED (${snap.vms.length})',
-            value:
-                '${fmtBytes(snap.vmMemAllocated)} · ${fmtPct(allocPct, digits: 0)}',
+            // This is the sum reported by guest operating systems. It is not
+            // a Proxmox allocation/commitment metric.
+            label: 'GUEST RAM SUM ($guestsReportingRam)',
+            value: guestsReportingRam == 0
+                ? '--'
+                : '${fmtBytes(snap.vmMemReportedTotal)} · ${fmtPct(guestTotalPct, digits: 0)}',
             size: TZ.body,
             emphasis: false,
           ),
           StatLine(
-            label: 'VM IN USE',
-            value: fmtBytes(snap.vmMemUsed),
+            label: 'VM IN USE ($guestsReportingUsed)',
+            value: guestsReportingUsed == 0 ? '--' : fmtBytes(snap.vmMemUsed),
             size: TZ.body,
             emphasis: false,
           ),
@@ -461,6 +491,21 @@ class _MemoryPanel extends StatelessWidget {
 /// One column of the node table: how wide it is, what it is called, and which
 /// side its content sits on. The header row and the data rows both read these,
 /// so a label cannot drift away from the values beneath it.
+/// One table cell, laid out from its column description. Header and row both
+/// go through this so a column can never be fixed in one and elastic in the
+/// other.
+Widget _cell(
+  _Column column, {
+  required Key key,
+  required Widget? child,
+}) {
+  return SizedBox(
+    key: key,
+    width: column.width,
+    child: Align(alignment: column.align, child: child),
+  );
+}
+
 class _Column {
   const _Column({
     required this.id,
@@ -474,10 +519,9 @@ class _Column {
   final String header;
 
   /// Numbers are flushed right so their digits line up; names and compound
-  /// figures read left. Headings ignore this and always start at the column's
-  /// left edge: matching the values' side lined up the far ends instead, which
-  /// left a short label like CPU stranded at the tail of its number while a
-  /// long one like MEMORY hung out past the front of its own.
+  /// figures read left. The heading follows its column, so `CPU` sits over the
+  /// last digit of the percentage rather than floating off to the left of it
+  /// with the column's whole width in between.
   final bool right;
 
   Alignment get align => right ? Alignment.centerRight : Alignment.centerLeft;
@@ -506,8 +550,10 @@ abstract final class _Table {
     right: true,
   );
   static const memBar = _Column(id: 'memBar', width: 120, right: true);
-  static const memText = _Column(id: 'memText', width: 92);
-  static const root = _Column(id: 'root', width: 112, header: 'ROOT');
+  /// Both this and [root] hold a `used/total` pair, and `fmtBytes` caps each
+  /// side at five characters, so eleven is the widest either can get.
+  static const memText = _Column(id: 'memText', width: 112);
+  static const root = _Column(id: 'root', width: 108, header: 'ROOT');
   static const uptime = _Column(
     id: 'uptime',
     width: 56,
@@ -525,9 +571,11 @@ abstract final class _Table {
   /// the bar ends in a dark track and the two would otherwise touch.
   static const barPad = 16.0;
 
-  /// Pushes the last column towards the panel edge instead of leaving the row
-  /// trailing off with slack behind it.
-  static const flex = 'flex';
+  /// Shares whatever width the fixed columns leave over, one equal portion per
+  /// group boundary. Handing the whole surplus to a single column or a single
+  /// spacer opened one conspicuous hole in the row; split evenly it reads as
+  /// breathing room between groups instead.
+  static const spread = 'spread';
 
   /// Keeps the last column off the panel frame. The first column needs no such
   /// margin: its content is a small dot inside a wide cell, so it already
@@ -539,18 +587,23 @@ abstract final class _Table {
     dot,
     name,
     gap,
+    spread,
     cpu,
     pad,
     cpuBar,
     gap,
+    spread,
     mem,
     pad,
     memBar,
     barPad,
+    spread,
     memText,
     gap,
+    spread,
     root,
-    flex,
+    gap,
+    spread,
     uptime,
     tail,
   ];
@@ -558,6 +611,10 @@ abstract final class _Table {
 
 class _NodeTable extends StatelessWidget {
   const _NodeTable({required this.snap, required this.store});
+
+  /// Shortest a row may get before the table starts scrolling instead: below
+  /// this the sparkline and the two-line memory cell stop fitting.
+  static const _minRow = 44.0;
 
   final Snapshot snap;
   final MetricsStore store;
@@ -579,19 +636,35 @@ class _NodeTable extends StatelessWidget {
           const SizedBox(height: 22, child: _TableHeader()),
           Container(height: 1, color: TC.gridLine),
           Expanded(
-            child: Column(
-              children: [
-                for (final n in guests)
-                  Expanded(
-                    child: _NodeRow(
-                      node: n,
-                      store: store,
-                      // The rule under the last row separates it from nothing.
-                      lastRow: n == guests.last,
+            child: guests.isEmpty
+                ? Center(
+                    child: Text(
+                      'NO GUEST TARGETS',
+                      style: ts(size: TZ.small, color: TC.dim),
                     ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, box) {
+                      // Rows share the height, as they did when this was a
+                      // Column of Expanded children, until sharing would put
+                      // them under _minRow. Past that the list scrolls instead
+                      // of overflowing the panel.
+                      final extent = math.max(
+                        _minRow,
+                        box.maxHeight / guests.length,
+                      );
+                      return ListView.builder(
+                        padding: EdgeInsets.zero,
+                        itemExtent: extent,
+                        itemCount: guests.length,
+                        itemBuilder: (context, i) => _NodeRow(
+                          node: guests[i],
+                          store: store,
+                          lastRow: i == guests.length - 1,
+                        ),
+                      );
+                    },
                   ),
-              ],
-            ),
           ),
         ],
       ),
@@ -613,17 +686,14 @@ class _TableHeader extends StatelessWidget {
           else if (item is String)
             const Spacer()
           else
-            SizedBox(
-              key: ValueKey('head-${(item as _Column).id}'),
-              width: item.width,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  item.header,
-                  style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
-                  maxLines: 1,
-                  overflow: TextOverflow.clip,
-                ),
+            _cell(
+              item as _Column,
+              key: ValueKey('head-${item.id}'),
+              child: Text(
+                item.header,
+                style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
               ),
             ),
       ],
@@ -707,13 +777,10 @@ class _NodeRow extends StatelessWidget {
             else if (item is String)
               const Spacer()
             else
-              SizedBox(
-                key: ValueKey('cell-${(item as _Column).id}-${n.instance}'),
-                width: item.width,
-                child: Align(
-                  alignment: item.align,
-                  child: content[item.id],
-                ),
+              _cell(
+                item as _Column,
+                key: ValueKey('cell-${item.id}-${n.instance}'),
+                child: content[item.id],
               ),
         ],
       ),

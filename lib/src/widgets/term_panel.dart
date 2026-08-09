@@ -46,30 +46,38 @@ class TermPanel extends StatelessWidget {
         Positioned.fill(child: Padding(padding: padding, child: child)),
         Positioned(
           left: 10,
+          right: 10,
           top: -1,
-          child: Container(
-            color: TC.bg,
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            child: Text(
-              title.toUpperCase(),
-              style: ts(
-                size: TZ.caption,
-                color: titleColor,
-                letterSpacing: 1.2,
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    color: TC.bg,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Text(
+                      title.toUpperCase(),
+                      style: ts(
+                        size: TZ.caption,
+                        color: titleColor,
+                        letterSpacing: 1.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (trailing != null)
+                Container(
+                  color: TC.bg,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: trailing,
+                ),
+            ],
           ),
         ),
-        if (trailing != null)
-          Positioned(
-            right: 10,
-            top: -1,
-            child: Container(
-              color: TC.bg,
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: trailing,
-            ),
-          ),
       ],
     );
   }

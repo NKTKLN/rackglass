@@ -21,26 +21,35 @@ void main() {
     final client = PromClient();
     addTearDown(client.close);
 
-    final expressions = <String, String>{
-      'up': Q.up,
-      'cpuBusy': Q.cpuBusy,
-      'cores': Q.cores,
-      'memTotal': Q.memTotal,
-      'memAvailable': Q.memAvailable,
-      'load1': Q.load1,
-      'bootTime': Q.bootTime,
-      'fsSize': Q.fsSize,
-      'netRx': Q.netRx,
-      'cpuTemp': Q.cpuTemp,
-      'gpuTemp': Q.gpuTemp,
-      'gpuAgeFresh': Q.gpuAgeFresh,
-      'gpuAgeDeep': Q.gpuAgeDeep,
+    final optional = <InstantQuery>{
+      InstantQuery.gpuTemp,
+      InstantQuery.gpuUtil,
+      InstantQuery.gpuFbUsed,
+      InstantQuery.gpuFbFree,
+      InstantQuery.gpuPower,
+      InstantQuery.gpuSmClock,
+      InstantQuery.gpuMemClock,
+      InstantQuery.gpuMemTemp,
+      InstantQuery.gpuAgeFresh,
     };
 
-    for (final e in expressions.entries) {
+    for (final e in Q.instantPollQueries.entries) {
       final r = await client.instant(e.value);
-      expect(r, isNotEmpty, reason: '${e.key} returned nothing');
-      stdout.writeln('${e.key.padRight(14)} ${r.length} series');
+      if (!optional.contains(e.key)) {
+        expect(r, isNotEmpty, reason: '${e.key.name} returned nothing');
+      }
+      stdout.writeln('${e.key.name.padRight(14)} ${r.length} series');
+    }
+  }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
+
+  test('historical GPU fallback expressions still parse', () async {
+    final client = PromClient();
+    addTearDown(client.close);
+
+    for (final e in Q.gpuFallbackQueries.entries) {
+      final r = await client.instant(e.value);
+      final label = 'fallback.${e.key.name}'.padRight(22);
+      stdout.writeln('$label ${r.length} series');
     }
   }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
 
@@ -72,17 +81,33 @@ void main() {
     }
   }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
 
-  test('range queries return matrices for the graphs screen', () async {
+  test('every range query used by the graphs screen returns a matrix', () async {
     final store = MetricsStore();
     addTearDown(store.dispose);
 
     const window = Duration(hours: 1);
-    final cpu = await store.loadRange(Q.rangeCpu, window);
-    expect(cpu, isNotEmpty);
-    expect(cpu.first.points.length, greaterThan(10));
-    stdout.writeln(
-      'range cpu: ${cpu.length} series x ${cpu.first.points.length} points '
-      '@ step ${MetricsStore.stepFor(window).inSeconds}s',
-    );
+    final expressions = <String, String>{
+      'cpu': Q.rangeCpu,
+      'memory': Q.rangeMemPct,
+      'cpuTemperature': Q.rangeTempCpu,
+      'gpuTemperature': Q.rangeTempGpu,
+      'gpuUtil': Q.rangeGpuUtil,
+      'networkRx': Q.rangeNetRx,
+    };
+    final end = DateTime.now();
+    for (final e in expressions.entries) {
+      final series = await store.loadRange(e.value, window, end: end);
+      expect(series, isNotEmpty, reason: '${e.key} returned nothing');
+      expect(
+        series.first.points.length,
+        greaterThan(10),
+        reason: '${e.key} returned too few points',
+      );
+      stdout.writeln(
+        '${e.key.padRight(14)} ${series.length} series x '
+        '${series.first.points.length} points '
+        '@ step ${MetricsStore.stepFor(window).inSeconds}s',
+      );
+    }
   }, skip: live ? false : 'set --dart-define=PROMTERM_LIVE=1');
 }

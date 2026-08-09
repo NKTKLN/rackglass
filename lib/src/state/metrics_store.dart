@@ -8,21 +8,24 @@ import '../prom/prom_client.dart';
 import '../prom/queries.dart';
 
 /// Fixed-length ring of recent values, used for the inline sparklines.
+///
+/// Null is a real sample: it means the target/value was unavailable for that
+/// poll. Keeping the gap prevents two readings separated by an outage from
+/// being drawn next to each other as if monitoring had been continuous.
 class _Ring {
-  final List<double> _values = [];
+  final List<double?> _values = [];
 
   void add(double? v) {
-    if (v == null || v.isNaN) return;
-    _values.add(v);
+    _values.add(v == null || v.isNaN ? null : v);
     if (_values.length > AppConfig.historyDepth) _values.removeAt(0);
   }
 
-  List<double> get values => List.unmodifiable(_values);
+  List<double?> get values => List.unmodifiable(_values);
 }
 
 /// Polls Prometheus on a timer and exposes the latest [Snapshot] plus a short
-/// client-side history for sparklines. Also serves the range queries the GRAPHS
-/// screen needs.
+/// client-side history for sparklines. Also serves the range queries used by
+/// GRAPHS/NODES.
 class MetricsStore extends ChangeNotifier {
   MetricsStore({PromClient? client}) : _client = client ?? PromClient();
 
@@ -41,6 +44,12 @@ class MetricsStore extends ChangeNotifier {
   final _Ring _hostTempHistory = _Ring();
   final _Ring _gpuTempHistory = _Ring();
   final _Ring _gpuUtilHistory = _Ring();
+  String? _primaryGpuKey;
+
+  Map<InstantQuery, List<PromSample>> _gpuFallbackCache = const {};
+  DateTime? _gpuFallbackAt;
+  Set<String> _gpuFallbackDown = const {};
+  bool _gpuFallbackInFlight = false;
 
   Snapshot? get snapshot => _snapshot;
   String? get error => _error;
@@ -49,13 +58,23 @@ class MetricsStore extends ChangeNotifier {
   DateTime? get lastSuccess => _lastSuccess;
   String get endpoint => _client.baseUrl;
 
-  List<double> cpuHistory(String instance) =>
+  Duration? get snapshotAge =>
+      _lastSuccess == null ? null : DateTime.now().difference(_lastSuccess!);
+
+  bool get stale {
+    final age = snapshotAge;
+    return _snapshot != null &&
+        age != null &&
+        age > AppConfig.snapshotStaleAfter;
+  }
+
+  List<double?> cpuHistory(String instance) =>
       _cpuHistory[instance]?.values ?? const [];
-  List<double> memHistory(String instance) =>
+  List<double?> memHistory(String instance) =>
       _memHistory[instance]?.values ?? const [];
-  List<double> get hostTempHistory => _hostTempHistory.values;
-  List<double> get gpuTempHistory => _gpuTempHistory.values;
-  List<double> get gpuUtilHistory => _gpuUtilHistory.values;
+  List<double?> get hostTempHistory => _hostTempHistory.values;
+  List<double?> get gpuTempHistory => _gpuTempHistory.values;
+  List<double?> get gpuUtilHistory => _gpuUtilHistory.values;
 
   void start() {
     if (_timer != null) return;
@@ -65,6 +84,7 @@ class MetricsStore extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _timer?.cancel();
     _timer = null;
@@ -90,66 +110,114 @@ class MetricsStore extends ChangeNotifier {
       if (_disposed) return;
       _error = e.message;
       _consecutiveErrors++;
+      _recordFailedPoll();
     } catch (e) {
       if (_disposed) return;
       _error = e.toString();
       _consecutiveErrors++;
+      _recordFailedPoll();
     } finally {
       _inFlight = false;
       if (!_disposed) notifyListeners();
     }
   }
 
-  Future<Snapshot> _fetch(DateTime started) async {
-    // One round trip per expression, all in flight at once. Prometheus handles
-    // these in single-digit milliseconds each on this dataset.
-    final results = await Future.wait([
-      _client.instant(Q.up), // 0
-      _client.instant(Q.cpuBusy), // 1
-      _client.instant(Q.cores), // 2
-      _client.instant(Q.memTotal), // 3
-      _client.instant(Q.memAvailable), // 4
-      _client.instant(Q.swapTotal), // 5
-      _client.instant(Q.swapFree), // 6
-      _client.instant(Q.load1), // 7
-      _client.instant(Q.load5), // 8
-      _client.instant(Q.load15), // 9
-      _client.instant(Q.bootTime), // 10
-      _client.instant(Q.fsSize), // 11
-      _client.instant(Q.fsAvail), // 12
-      _client.instant(Q.netRx), // 13
-      _client.instant(Q.netTx), // 14
-      _client.instant(Q.cpuTemp), // 15
-      _client.instant(Q.cpuIoWait), // 16
-      _client.instant(Q.gpuTemp), // 17
-      _client.instant(Q.gpuUtil), // 18
-      _client.instant(Q.gpuFbUsed), // 19
-      _client.instant(Q.gpuFbFree), // 20
-      _client.instant(Q.gpuPower), // 21
-      _client.instant(Q.gpuSmClock), // 22
-      _client.instant(Q.gpuMemClock), // 23
-      _client.instant(Q.gpuMemTemp), // 24
-      _client.instant(Q.gpuMemCopyUtil), // 25
-      _client.instant(Q.gpuAgeDeep), // 26
-      _client.instant(Q.gpuAgeFresh), // 27
+  Future<Map<InstantQuery, List<PromSample>>> _instantBatch() async {
+    final pairs = await Future.wait([
+      for (final entry in Q.instantPollQueries.entries)
+        _client.instant(entry.value).then((samples) => (entry.key, samples)),
     ]);
+    return {for (final pair in pairs) pair.$1: pair.$2};
+  }
 
-    final up = results[0];
-    final cpu = _byInstance(results[1]);
-    final cores = _byInstance(results[2]);
-    final memTotal = _byInstance(results[3]);
-    final memAvail = _byInstance(results[4]);
-    final swapTotal = _byInstance(results[5]);
-    final swapFree = _byInstance(results[6]);
-    final load1 = _byInstance(results[7]);
-    final load5 = _byInstance(results[8]);
-    final load15 = _byInstance(results[9]);
-    final boot = _byInstance(results[10]);
-    final fsSize = _byInstance(results[11]);
-    final fsAvail = _byInstance(results[12]);
-    final rx = _byInstance(results[13]);
-    final tx = _byInstance(results[14]);
-    final ioWait = _byInstance(results[16]);
+  /// Historical GPU values for exporters that are currently down.
+  ///
+  /// The seven-day scans are awaited exactly once, on the first poll that sees
+  /// a given exporter down — there is nothing to show until they land, so
+  /// waiting costs nothing. From then on the cache is refreshed in the
+  /// background and a poll returns whatever it already holds: node metrics are
+  /// already in hand and must not sit behind a TSDB scan. A refresh that lands
+  /// between polls is picked up by the next one.
+  Future<Map<InstantQuery, List<PromSample>>> _gpuFallbackFor(
+    Set<String> downInstances,
+  ) async {
+    if (downInstances.isEmpty) {
+      _gpuFallbackDown = const {};
+      _gpuFallbackCache = const {};
+      _gpuFallbackAt = null;
+      return const {};
+    }
+
+    final sameTargets = setEquals(_gpuFallbackDown, downInstances);
+    final cached = sameTargets
+        ? _gpuFallbackCache
+        : const <InstantQuery, List<PromSample>>{};
+    final expired =
+        _gpuFallbackAt == null ||
+        DateTime.now().difference(_gpuFallbackAt!) >=
+            AppConfig.gpuFallbackRefresh;
+    if (!expired && sameTargets) return cached;
+
+    if (cached.isEmpty) return _refreshGpuFallback(downInstances);
+    if (!_gpuFallbackInFlight) unawaited(_refreshGpuFallback(downInstances));
+    return cached;
+  }
+
+  Future<Map<InstantQuery, List<PromSample>>> _refreshGpuFallback(
+    Set<String> downInstances,
+  ) async {
+    if (_gpuFallbackInFlight) return _gpuFallbackCache;
+    _gpuFallbackInFlight = true;
+    try {
+      final pairs = await Future.wait([
+        for (final entry in Q.gpuFallbackQueries.entries)
+          _client.instant(entry.value).then((samples) => (entry.key, samples)),
+      ]);
+      final fetched = {for (final pair in pairs) pair.$1: pair.$2};
+      if (_disposed) return fetched;
+      _gpuFallbackCache = fetched;
+      _gpuFallbackAt = DateTime.now();
+      _gpuFallbackDown = Set.unmodifiable(downInstances);
+      return fetched;
+    } catch (_) {
+      // Historical GPU data is optional diagnostics. A seven-day fallback query
+      // failing must not take otherwise-current node metrics offline. Reuse a
+      // cache only when it belongs to the same down-target set.
+      return setEquals(_gpuFallbackDown, downInstances)
+          ? _gpuFallbackCache
+          : const {};
+    } finally {
+      _gpuFallbackInFlight = false;
+    }
+  }
+
+  Future<Snapshot> _fetch(DateTime started) async {
+    final results = await _instantBatch();
+
+    List<PromSample> r(InstantQuery query) {
+      final value = results[query];
+      if (value == null) {
+        throw StateError('instant query missing from batch: ${query.name}');
+      }
+      return value;
+    }
+
+    final up = r(InstantQuery.up);
+    final cpu = _byInstance(r(InstantQuery.cpuBusy));
+    final cores = _byInstance(r(InstantQuery.cores));
+    final memTotal = _byInstance(r(InstantQuery.memTotal));
+    final memAvail = _byInstance(r(InstantQuery.memAvailable));
+    final swapTotal = _byInstance(r(InstantQuery.swapTotal));
+    final swapFree = _byInstance(r(InstantQuery.swapFree));
+    final load1 = _byInstance(r(InstantQuery.load1));
+    final load5 = _byInstance(r(InstantQuery.load5));
+    final load15 = _byInstance(r(InstantQuery.load15));
+    final boot = _byInstance(r(InstantQuery.bootTime));
+    final fsSize = _byInstance(r(InstantQuery.fsSize));
+    final fsAvail = _byInstance(r(InstantQuery.fsAvail));
+    final rx = _byInstance(r(InstantQuery.netRx));
+    final tx = _byInstance(r(InstantQuery.netTx));
+    final ioWait = _byInstance(r(InstantQuery.cpuIoWait));
 
     final nodes = <NodeStat>[];
     for (final s in up) {
@@ -179,42 +247,67 @@ class MetricsStore extends ChangeNotifier {
         ),
       );
     }
-    // Hypervisor first, then guests alphabetically — stable row order between
-    // polls matters more than any clever ranking.
     nodes.sort((a, b) {
       if (a.isHypervisor != b.isHypervisor) return a.isHypervisor ? -1 : 1;
       return a.instance.compareTo(b.instance);
     });
 
-    final temps = [
-      for (final s in results[15])
+    // Q.allTemps is a PromQL left join: labelled channels carry `label`, and
+    // unlabelled hwmon channels still arrive with their raw sensor id.
+    final temps = <TempReading>[
+      for (final s in r(InstantQuery.allTemps))
         TempReading(
           instance: s.instance ?? '?',
           chip: s.labels['chip'] ?? '?',
           sensor: s.labels['sensor'] ?? '?',
           label: s.labels['label'] ?? s.labels['sensor'] ?? '?',
           celsius: s.value,
+          named: s.labels['label'] != null,
         ),
-    ];
+    ]..sort((a, b) {
+      final instance = a.instance.compareTo(b.instance);
+      if (instance != 0) return instance;
+      final chip = a.chip.compareTo(b.chip);
+      if (chip != 0) return chip;
+      return a.sensor.compareTo(b.sensor);
+    });
 
     final dcgmUp = <String, bool>{
       for (final s in up)
         if (s.labels['job'] == 'dcgm' && s.instance != null)
           s.instance!: s.value != 0,
     };
+    final downDcgm = {
+      for (final entry in dcgmUp.entries)
+        if (!entry.value) entry.key,
+    };
+    final fallback = await _gpuFallbackFor(downDcgm);
+
+    bool fromDownExporter(PromSample sample) =>
+        sample.instance != null && dcgmUp[sample.instance] == false;
+
+    List<PromSample> gpuMetric(InstantQuery metric) => [
+      for (final sample in r(metric))
+        if (!fromDownExporter(sample)) sample,
+      for (final sample in fallback[metric] ?? const <PromSample>[])
+        if (fromDownExporter(sample)) sample,
+    ];
 
     final gpus = _buildGpus(
-      temp: results[17],
-      util: results[18],
-      fbUsed: results[19],
-      fbFree: results[20],
-      power: results[21],
-      smClock: results[22],
-      memClock: results[23],
-      memTemp: results[24],
-      memCopyUtil: results[25],
-      ageDeep: results[26],
-      ageFresh: results[27],
+      temp: gpuMetric(InstantQuery.gpuTemp),
+      util: gpuMetric(InstantQuery.gpuUtil),
+      fbUsed: gpuMetric(InstantQuery.gpuFbUsed),
+      fbFree: gpuMetric(InstantQuery.gpuFbFree),
+      power: gpuMetric(InstantQuery.gpuPower),
+      smClock: gpuMetric(InstantQuery.gpuSmClock),
+      memClock: gpuMetric(InstantQuery.gpuMemClock),
+      memTemp: gpuMetric(InstantQuery.gpuMemTemp),
+      ageDeep: [
+        for (final sample in
+            fallback[InstantQuery.gpuAgeDeep] ?? const <PromSample>[])
+          if (fromDownExporter(sample)) sample,
+      ],
+      ageFresh: r(InstantQuery.gpuAgeFresh),
       exporterUp: dcgmUp,
     );
 
@@ -236,13 +329,13 @@ class MetricsStore extends ChangeNotifier {
     required List<PromSample> smClock,
     required List<PromSample> memClock,
     required List<PromSample> memTemp,
-    required List<PromSample> memCopyUtil,
     required List<PromSample> ageDeep,
     required List<PromSample> ageFresh,
     required Map<String, bool> exporterUp,
   }) {
-    // A GPU is identified by (instance, gpu index); every metric carries both.
-    String keyOf(PromSample s) => '${s.instance ?? "?"}/${s.labels["gpu"] ?? "0"}';
+    String idOf(PromSample s) =>
+        s.labels['UUID'] ?? s.labels['gpu'] ?? s.labels['device'] ?? '0';
+    String keyOf(PromSample s) => '${s.instance ?? "?"}/${idOf(s)}';
     Map<String, double> keyed(List<PromSample> xs) => {
       for (final s in xs) keyOf(s): s.value,
     };
@@ -255,27 +348,50 @@ class MetricsStore extends ChangeNotifier {
     final smBy = keyed(smClock);
     final memClockBy = keyed(memClock);
     final memTempBy = keyed(memTemp);
-    final copyBy = keyed(memCopyUtil);
     final deepBy = keyed(ageDeep);
-    // A live series answers exactly; only a long-dead one needs the subquery,
-    // where being a few minutes out makes no difference to anything.
     final freshBy = keyed(ageFresh);
 
-    final out = <GpuStat>[];
+    // Seed from every metric, not just temperature. If one live DCGM field
+    // disappears the GPU still exists and that individual reading becomes `--`.
+    final seeds = <String, PromSample>{};
+    for (final xs in [
+      temp,
+      util,
+      fbUsed,
+      fbFree,
+      power,
+      smClock,
+      memClock,
+      memTemp,
+      ageFresh,
+      ageDeep,
+    ]) {
+      for (final s in xs) {
+        seeds.putIfAbsent(keyOf(s), () => s);
+      }
+    }
+    // Prefer temperature metadata when available because it consistently
+    // carries modelName/UUID in dcgm-exporter.
     for (final s in temp) {
-      final k = keyOf(s);
+      seeds[keyOf(s)] = s;
+    }
+
+    final out = <GpuStat>[];
+    for (final entry in seeds.entries) {
+      final k = entry.key;
+      final s = entry.value;
       final inst = s.instance ?? '?';
       out.add(
         GpuStat(
           gpu: s.labels['gpu'] ?? '0',
           instance: inst,
           model: s.labels['modelName'] ?? 'GPU',
+          uuid: s.labels['UUID'],
           exporterUp: exporterUp[inst] ?? false,
           ageSeconds: freshBy[k] ?? deepBy[k],
           temp: tempBy[k],
           memTemp: memTempBy[k],
           util: utilBy[k],
-          memCopyUtil: copyBy[k],
           fbUsedMiB: fbUsedBy[k],
           fbFreeMiB: fbFreeBy[k],
           powerWatts: powerBy[k],
@@ -284,33 +400,75 @@ class MetricsStore extends ChangeNotifier {
         ),
       );
     }
-    out.sort((a, b) => a.gpu.compareTo(b.gpu));
+    out.sort((a, b) {
+      final inst = a.instance.compareTo(b.instance);
+      if (inst != 0) return inst;
+      final ai = int.tryParse(a.gpu);
+      final bi = int.tryParse(b.gpu);
+      if (ai != null && bi != null) return ai.compareTo(bi);
+      return a.gpu.compareTo(b.gpu);
+    });
     return out;
   }
 
   void _recordHistory(Snapshot snap) {
-    for (final n in snap.nodes) {
-      if (!n.up) continue;
-      (_cpuHistory[n.instance] ??= _Ring()).add(n.cpuPct);
-      (_memHistory[n.instance] ??= _Ring()).add(n.memPct);
+    final nodesBy = {for (final n in snap.nodes) n.instance: n};
+    final knownNodes = <String>{
+      ..._cpuHistory.keys,
+      ..._memHistory.keys,
+      ...nodesBy.keys,
+    };
+    for (final instance in knownNodes) {
+      final n = nodesBy[instance];
+      (_cpuHistory[instance] ??= _Ring()).add(n?.up == true ? n?.cpuPct : null);
+      (_memHistory[instance] ??= _Ring()).add(n?.up == true ? n?.memPct : null);
     }
+
     _hostTempHistory.add(snap.cpuPackageTemp?.celsius);
-    final gpu = snap.gpus.isEmpty ? null : snap.gpus.first;
-    // Only record live GPU readings; replaying a stale value would draw a flat
-    // line that looks like a healthy idle GPU.
-    if (gpu != null && !gpu.stale) {
-      _gpuTempHistory.add(gpu.temp);
-      _gpuUtilHistory.add(gpu.util);
+
+    // Latched so the strip keeps following one card while several are present,
+    // but re-latched the moment that card is gone: a replaced GPU or a changed
+    // UUID must not leave the sparkline blank for the rest of the session.
+    if (snap.gpus.isEmpty) {
+      _primaryGpuKey = null;
+    } else if (!snap.gpus.any((g) => g.key == _primaryGpuKey)) {
+      _primaryGpuKey = snap.gpus.first.key;
     }
+    GpuStat? gpu;
+    for (final candidate in snap.gpus) {
+      if (candidate.key == _primaryGpuKey) {
+        gpu = candidate;
+        break;
+      }
+    }
+    _gpuTempHistory.add(gpu != null && !gpu.stale ? gpu.temp : null);
+    _gpuUtilHistory.add(gpu != null && !gpu.stale ? gpu.util : null);
   }
 
-  /// Range query passthrough for the GRAPHS screen.
-  Future<List<PromSeries>> loadRange(String query, Duration window) {
-    final end = DateTime.now();
+  void _recordFailedPoll() {
+    for (final ring in _cpuHistory.values) {
+      ring.add(null);
+    }
+    for (final ring in _memHistory.values) {
+      ring.add(null);
+    }
+    _hostTempHistory.add(null);
+    _gpuTempHistory.add(null);
+    _gpuUtilHistory.add(null);
+  }
+
+  /// Range query passthrough. Supplying [end] lets a screen issue several
+  /// aligned queries against one exact time boundary.
+  Future<List<PromSeries>> loadRange(
+    String query,
+    Duration window, {
+    DateTime? end,
+  }) {
+    final queryEnd = end ?? DateTime.now();
     return _client.range(
       query,
-      start: end.subtract(window),
-      end: end,
+      start: queryEnd.subtract(window),
+      end: queryEnd,
       step: stepFor(window),
     );
   }

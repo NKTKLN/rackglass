@@ -25,25 +25,32 @@ String barText(double? pct, int width) {
 ///
 /// Under three samples there is no shape to draw yet — a lone block would read
 /// as a spike — so the strip stays an empty dotted track until history builds.
-String sparkText(List<double> values, int width, {double? min, double? max}) {
-  if (values.length < 3) return '·' * width;
+String sparkText(
+  List<double?> values,
+  int width, {
+  double? min,
+  double? max,
+}) {
+  if (values.isEmpty) return '·' * width;
   final tail = values.length > width
       ? values.sublist(values.length - width)
       : values;
-  var lo = min ?? tail.reduce((a, b) => a < b ? a : b);
-  var hi = max ?? tail.reduce((a, b) => a > b ? a : b);
+  final valid = [for (final v in tail) if (v != null && !v.isNaN) v];
+  if (valid.length < 3) return '·' * width;
+
+  var lo = min ?? valid.reduce((a, b) => a < b ? a : b);
+  var hi = max ?? valid.reduce((a, b) => a > b ? a : b);
   if (hi - lo < 1e-9) {
     lo -= 0.5;
     hi += 0.5;
   }
   final body = tail
       .map((v) {
+        if (v == null || v.isNaN) return '·';
         final n = ((v - lo) / (hi - lo)).clamp(0.0, 1.0);
         return _sparkChars[(n * (_sparkChars.length - 1)).round()];
       })
       .join();
-  // Pad with the same dots as the empty state so a short history reads as a
-  // partly-filled track rather than as a floating fragment.
   return body.padLeft(width, '·');
 }
 

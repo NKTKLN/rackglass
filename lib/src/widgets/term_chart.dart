@@ -22,6 +22,7 @@ class TermChart extends StatelessWidget {
     super.key,
     required this.series,
     required this.window,
+    this.endTime,
     this.unit = '',
     this.yMin,
     this.yMax,
@@ -31,6 +32,11 @@ class TermChart extends StatelessWidget {
 
   final List<ChartSeries> series;
   final Duration window;
+
+  /// Exact end boundary used for the Prometheus range query. Without this, a
+  /// dead series' last sample would be shifted to the right edge and labelled
+  /// `now`, visually hiding the gap since it stopped.
+  final DateTime? endTime;
   final String unit;
 
   /// Force the y-range; otherwise it is derived from the data with headroom.
@@ -58,6 +64,7 @@ class TermChart extends StatelessWidget {
             painter: _ChartPainter(
               series: series,
               window: window,
+              endTime: endTime,
               unit: unit,
               forcedMin: yMin,
               forcedMax: yMax,
@@ -113,6 +120,7 @@ class _ChartPainter extends CustomPainter {
   _ChartPainter({
     required this.series,
     required this.window,
+    required this.endTime,
     required this.unit,
     required this.forcedMin,
     required this.forcedMax,
@@ -121,6 +129,11 @@ class _ChartPainter extends CustomPainter {
 
   final List<ChartSeries> series;
   final Duration window;
+
+  /// Exact end boundary used for the Prometheus range query. Without this, a
+  /// dead series' last sample would be shifted to the right edge and labelled
+  /// `now`, visually hiding the gap since it stopped.
+  final DateTime? endTime;
   final String unit;
   final double? forcedMin;
   final double? forcedMax;
@@ -154,10 +167,13 @@ class _ChartPainter extends CustomPainter {
     if (forcedMin == null) lo -= (hi - lo).abs() * 0.05;
     if (hi - lo < 1e-6) hi = lo + 1;
 
-    final tEnd = series
+    final sampleEnd = series
         .expand((s) => s.points)
         .map((p) => p.t)
         .reduce(math.max);
+    final tEnd = endTime == null
+        ? sampleEnd
+        : endTime!.millisecondsSinceEpoch / 1000.0;
     final tStart = tEnd - window.inSeconds;
     final tSpan = math.max(tEnd - tStart, 1.0);
 
@@ -234,38 +250,61 @@ class _ChartPainter extends CustomPainter {
     double Function(double) yOf,
   ) {
     if (s.points.isEmpty) return;
-    final path = Path();
-    final area = Path();
-    var started = false;
+
+    // A matrix can contain a real time gap when a target stops exporting. Do
+    // not draw a diagonal bridge across it. MetricsStore aims for ~240 points
+    // per range, with a 15s floor, so three expected steps is a conservative
+    // discontinuity threshold that still tolerates normal scrape jitter.
+    final expectedStep = math.max(15.0, window.inSeconds / 240.0);
+    final gapThreshold = expectedStep * 3;
+    final segments = <(Path, Path)>[];
+    Path? path;
+    Path? area;
     Offset? last;
+    double? previousT;
+
+    void finishSegment() {
+      if (path == null || area == null || last == null) return;
+      area!.lineTo(last.dx, plot.bottom);
+      area!.close();
+      segments.add((path!, area!));
+      path = null;
+      area = null;
+    }
+
     for (final p in s.points) {
       final o = Offset(xOf(p.t), yOf(p.v));
-      if (!started) {
-        path.moveTo(o.dx, o.dy);
-        area.moveTo(o.dx, plot.bottom);
-        area.lineTo(o.dx, o.dy);
-        started = true;
+      if (previousT != null && p.t - previousT > gapThreshold) {
+        finishSegment();
+      }
+      if (path == null) {
+        path = Path()..moveTo(o.dx, o.dy);
+        area = Path()
+          ..moveTo(o.dx, plot.bottom)
+          ..lineTo(o.dx, o.dy);
       } else {
-        path.lineTo(o.dx, o.dy);
-        area.lineTo(o.dx, o.dy);
+        path!.lineTo(o.dx, o.dy);
+        area!.lineTo(o.dx, o.dy);
       }
       last = o;
+      previousT = p.t;
     }
+    finishSegment();
     if (last == null) return;
-    area.lineTo(last.dx, plot.bottom);
-    area.close();
 
     canvas.save();
     canvas.clipRect(plot);
-    canvas.drawPath(area, Paint()..color = s.color.withValues(alpha: 0.09));
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeJoin = StrokeJoin.round
-        ..color = s.color,
-    );
+    for (final (line, fill) in segments) {
+      canvas.drawPath(fill, Paint()..color = s.color.withValues(alpha: 0.09));
+      canvas.drawPath(
+        line,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..strokeJoin = StrokeJoin.round
+          ..color = s.color,
+      );
+    }
     canvas.restore();
 
     // Head marker on the most recent sample.
@@ -301,7 +340,13 @@ class _ChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChartPainter old) =>
-      old.series != series || old.window != window;
+      old.series != series ||
+      old.window != window ||
+      old.endTime != endTime ||
+      old.unit != unit ||
+      old.forcedMin != forcedMin ||
+      old.forcedMax != forcedMax ||
+      old.yTicks != yTicks;
 }
 
 enum _Align { right, left, centerTop, rightTop }
