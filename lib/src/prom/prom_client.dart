@@ -66,20 +66,22 @@ class PromClient {
       'query': query,
       if (at != null) 'time': _unix(at),
     });
-    final result = (body['data']?['result'] as List?) ?? const [];
+    final data = body['data'];
+    final result = data is Map ? data['result'] : null;
     final out = <PromSample>[];
+    if (result is! List) return out;
     for (final row in result) {
-      final m = row as Map<String, dynamic>;
-      final pair = m['value'] as List?;
-      if (pair == null || pair.length < 2) continue;
+      if (row is! Map) continue;
+      final pair = row['value'];
+      if (pair is! List || pair.length < 2 || pair[0] is! num) continue;
       final v = _parseValue(pair[1]);
       if (v == null) continue;
       out.add(
         PromSample(
-          _labels(m['metric']),
+          _labels(row['metric']),
           v,
           DateTime.fromMillisecondsSinceEpoch(
-            ((pair[0] as num).toDouble() * 1000).round(),
+            (((pair[0] as num).toDouble()) * 1000).round(),
           ),
         ),
       );
@@ -99,18 +101,25 @@ class PromClient {
       'end': _unix(end),
       'step': '${step.inSeconds}s',
     });
-    final result = (body['data']?['result'] as List?) ?? const [];
+    final data = body['data'];
+    final result = data is Map ? data['result'] : null;
     final out = <PromSeries>[];
+    if (result is! List) return out;
     for (final row in result) {
-      final m = row as Map<String, dynamic>;
+      if (row is! Map) continue;
       final points = <PromPoint>[];
-      for (final p in (m['values'] as List? ?? const [])) {
-        final pair = p as List;
-        final v = _parseValue(pair[1]);
-        if (v == null) continue;
-        points.add(PromPoint((pair[0] as num).toDouble(), v));
+      final values = row['values'];
+      if (values is List) {
+        for (final p in values) {
+          if (p is! List || p.length < 2 || p[0] is! num) continue;
+          final v = _parseValue(p[1]);
+          if (v == null) continue;
+          points.add(PromPoint((p[0] as num).toDouble(), v));
+        }
       }
-      if (points.isNotEmpty) out.add(PromSeries(_labels(m['metric']), points));
+      if (points.isNotEmpty) {
+        out.add(PromSeries(_labels(row['metric']), points));
+      }
     }
     return out;
   }
@@ -128,7 +137,16 @@ class PromClient {
       final msg = _errorFromBody(res.body) ?? 'HTTP ${res.statusCode}';
       throw PromException(msg);
     }
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(res.body);
+    } catch (_) {
+      throw PromException('invalid JSON response');
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw PromException('invalid Prometheus response');
+    }
+    final body = decoded;
     if (body['status'] != 'success') {
       throw PromException(
         (body['error'] as String?) ?? 'query status=${body['status']}',
