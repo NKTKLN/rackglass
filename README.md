@@ -25,6 +25,8 @@ follows from that: an exporter on this cluster is down often enough that
 The same panel also carries a live view from a USB HDMI capture card, so the
 machine being monitored can be watched booting on the screen that monitors it.
 
+![DASH](docs/screenshots/dash.png)
+
 ## 📦 Dependencies
 
 * [Flutter](https://docs.flutter.dev/get-started/install/linux) with Linux
@@ -56,6 +58,21 @@ sudo dnf install -y clang cmake ninja-build gtk3-devel ffmpeg
 | `2` | **GRAPHS** | Four range-query charts — CPU %, memory %, temperatures, speedtest download — over 15m / 1h / 6h / 24h / 7d |
 | `3` | **NODES** | Master/detail per target: CPU, memory, root fs, network, boot time, a GPU section and hwmon list where the target has them, and separate CPU / memory / temperature / GPU history charts |
 | `4` | **CAPTURE** | Live view from the USB capture card, letterboxed to fit: fullscreen, frame stats, and a no-signal banner for when the card streams black |
+
+**GRAPHS** — range queries over a shared window. GPU keeps amber wherever it
+appears, so it stays apart from the node series on a shared axis.
+
+![GRAPHS](docs/screenshots/graphs.png)
+
+**NODES** — one target at a time, with the glyph in the list carrying the worst
+of its CPU, memory, root fs and GPU rather than a single number.
+
+![NODES](docs/screenshots/nodes.png)
+
+**CAPTURE** — the HDMI input, letterboxed, with the frame counters that say
+whether the stream is healthy.
+
+![CAPTURE](docs/screenshots/capture.png)
 
 Other keys:
 
