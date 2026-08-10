@@ -222,6 +222,13 @@ class _NodesScreenState extends State<NodesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, _) => _body(),
+    );
+  }
+
+  Widget _body() {
     final snap = widget.store.snapshot;
     if (snap == null) {
       return Center(

@@ -115,6 +115,7 @@ flutter run -d linux --dart-define=PROM_URL=http://10.0.0.5:9090
 | Define | Default | What it is |
 | --- | --- | --- |
 | `PROM_URL` | `http://localhost:9090` | Prometheus base URL, no trailing slash |
+| `POLL_SECONDS` | `5` | Seconds between polls; staleness is three of these |
 | `NET_DEVICE_EXCLUDE` | `^(lo\|veth.*\|tap.*\|fwbr.*\|fwln.*\|fwpr.*\|vmbr.*\|docker.*\|br-.*\|virbr.*)$` | Interfaces kept out of network totals |
 | `CAPTURE_DEVICE` | `/dev/video0` | V4L2 node to capture from; empty to scan for one |
 | `CAPTURE_W` | `1024` | Capture width requested from the card |

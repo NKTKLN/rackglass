@@ -24,7 +24,13 @@ class AppConfig {
   static const designHeight = 600.0;
 
   /// How often the instant queries are re-issued.
-  static const pollInterval = Duration(seconds: 5);
+  ///
+  /// A build-time value because the right answer depends on the machine: five
+  /// seconds is right on a desktop, and on a panel that draws its whole scene
+  /// in software every poll costs a rebuild nobody asked for.
+  static const pollSeconds = int.fromEnvironment('POLL_SECONDS', defaultValue: 5);
+
+  static const pollInterval = Duration(seconds: pollSeconds);
 
   /// HTTP timeout for a single query batch.
   static const requestTimeout = Duration(seconds: 6);
@@ -41,7 +47,12 @@ class AppConfig {
   /// Snapshot values older than this are visibly marked stale. A transient
   /// failed poll may keep the last good values on screen, but never indefinitely
   /// as if they were current.
-  static const snapshotStaleAfter = Duration(seconds: 15);
+  ///
+  /// Three missed polls, whatever the interval is. As a fixed fifteen seconds
+  /// it silently became "one missed poll" the moment somebody slowed the
+  /// polling down, and the dashboard would have started flashing STALE at
+  /// every hiccup.
+  static const snapshotStaleAfter = Duration(seconds: pollSeconds * 3);
 
   /// Range charts are refreshed while their screen is visible.
   static const rangeRefresh = Duration(minutes: 1);

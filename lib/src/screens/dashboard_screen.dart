@@ -21,6 +21,12 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribes here rather than at the app root, so a poll rebuilds the one
+    // screen that shows the numbers instead of all four.
+    return AnimatedBuilder(animation: store, builder: (context, _) => _body());
+  }
+
+  Widget _body() {
     final snap = store.snapshot;
     if (snap == null) {
       return Center(

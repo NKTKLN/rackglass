@@ -155,10 +155,12 @@ class _RackglassAppState extends State<RackglassApp> {
 
   Widget _screen() {
     final videoFull = _videoFull && _mode == AppMode.capture;
-    return AnimatedBuilder(
-      animation: _store,
-      builder: (context, _) => Stack(
-        children: [
+    // No store subscription here. Wrapping the whole stack in one meant every
+    // poll rebuilt all four screens plus the chrome, including CAPTURE and the
+    // mode buttons, none of which show a metric. The two screens that do read
+    // the snapshot subscribe themselves.
+    return Stack(
+      children: [
           // Keep this exact subtree mounted while fullscreen changes. Moving
           // CAPTURE between two unrelated parent trees used to dispose/start
           // it on every fullscreen toggle, racing the ffmpeg lifecycle.
@@ -191,8 +193,7 @@ class _RackglassAppState extends State<RackglassApp> {
               height: Chrome.status,
               child: _StatusBar(store: _store),
             ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -341,6 +342,13 @@ class _StatusBarState extends State<_StatusBar> {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, _) => _bar(),
+    );
+  }
+
+  Widget _bar() {
     final s = widget.store;
     final ok = s.healthy;
     final stale = s.stale;
