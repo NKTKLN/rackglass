@@ -115,6 +115,10 @@ class CaptureController extends ChangeNotifier {
   /// Monotonically increasing token for the currently valid capture session.
   int _generation = 0;
 
+  /// Thumbnail the signal check averages the frame down to.
+  static const _thumbW = 64;
+  static const _thumbH = 36;
+
   Uint8List _buf = Uint8List(0);
   (int, Uint8List)? _queued;
   bool _decoding = false;
@@ -526,28 +530,40 @@ class CaptureController extends ChangeNotifier {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
+      // Medium quality means mipmaps, which is what makes a 16x minification
+      // an average rather than a handful of taps. With `low` the thumbnail was
+      // effectively point-sampled: on a console it landed between the glyphs
+      // and reported a picture several shades darker than the real one.
       canvas.drawImageRect(
         img,
         ui.Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-        const ui.Rect.fromLTWH(0, 0, 32, 18),
-        ui.Paint()..filterQuality = ui.FilterQuality.low,
+        ui.Rect.fromLTWH(0, 0, _thumbW.toDouble(), _thumbH.toDouble()),
+        ui.Paint()..filterQuality = ui.FilterQuality.medium,
       );
       final picture = recorder.endRecording();
-      final small = await picture.toImage(32, 18);
+      final small = await picture.toImage(_thumbW, _thumbH);
       picture.dispose();
       final bytes = await small.toByteData(format: ui.ImageByteFormat.rawRgba);
       small.dispose();
       if (bytes == null || !_isActive(generation)) return;
 
       var sum = 0;
+      var peak = 0;
       final d = bytes.buffer.asUint8List();
       for (var i = 0; i < d.length; i += 4) {
-        sum += d[i] + d[i + 1] + d[i + 2];
+        final lum = d[i] + d[i + 1] + d[i + 2];
+        sum += lum;
+        if (lum > peak) peak = lum;
       }
       final mean = sum / (d.length / 4 * 3);
       if (!_isActive(generation)) return;
 
-      if (mean >= AppConfig.captureBlackLevel) {
+      // A lost input is uniformly black: nothing in the frame is bright. A
+      // console is also mostly black, but its text is not, so the brightest
+      // patch separates the two where average brightness cannot — this app
+      // points at terminals, where a dark average is the normal case.
+      if (peak / 3 >= AppConfig.capturePeakLevel ||
+          mean >= AppConfig.captureBlackLevel) {
         _blackStreak = 0;
         if (_state == CaptureState.noSignal) {
           _setStateFor(generation, CaptureState.streaming);

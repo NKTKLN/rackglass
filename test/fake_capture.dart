@@ -23,6 +23,31 @@ const _darkJpeg =
     'AIEAD//Z';
 
 Uint8List litFrame() => base64Decode(_litJpeg);
+
+/// A console: black nearly everywhere with a small bright patch, which is what
+/// this card is normally pointed at. Mean channel value 4.3, well under
+/// [AppConfig.captureBlackLevel], while the bright patch peaks at 255.
+const _consoleJpeg =
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYI'
+    'DAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkF'
+    'BQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU'
+    'FBQUFBT/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQF'
+    'BgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEI'
+    'I0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNk'
+    'ZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLD'
+    'xMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEB'
+    'AQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJB'
+    'UQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZH'
+    'SElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaan'
+    'qKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oA'
+    'DAMBAAIRAxEAPwD81Phb8LfE/wAafHemeDfBumf2z4k1Lzfsll9oig8zy4nlf55WVBhI'
+    '3PLDOMDkgUfFL4W+J/gt471Pwb4y0z+xvEmm+V9rsvtEU/l+ZEkqfPEzIcpIh4Y4zg8g'
+    'ij4W/FLxP8FvHemeMvBup/2N4k03zfsl79nin8vzInif5JVZDlJHHKnGcjkA0fFL4peJ'
+    '/jT471Pxl4y1P+2fEmpeV9rvfs8UHmeXEkSfJEqoMJGg4UZxk8kmgDlaKKKACiiigAoo'
+    'ooA//9k=';
+
+Uint8List consoleFrame() => base64Decode(_consoleJpeg);
+
 Uint8List darkFrame() => base64Decode(_darkJpeg);
 
 /// Stands in for the ffmpeg child process.

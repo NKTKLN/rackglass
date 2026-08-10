@@ -111,5 +111,17 @@ class AppConfig {
 
   /// Mean channel value below which a frame counts as no signal. The stick on
   /// this desk reports a luma average of 7 with nothing on its input.
+  ///
+  /// This alone is the wrong question for what the card is usually pointed at.
+  /// Measured on the live input, a Linux console at a login prompt averages
+  /// 20.6 — barely above the threshold — and any screen with fewer lines on it
+  /// falls under, which is a lost signal reported for a picture that is there.
   static const captureBlackLevel = 12.0;
+
+  /// Brightest patch, averaged into the signal-check thumbnail, above which
+  /// there is definitely a picture. A lost input is uniformly black and peaks
+  /// at 0; the same console peaks at 86. Sitting between the two, this decides
+  /// the normal case, and [captureBlackLevel] only catches a picture that is
+  /// dim everywhere without being black.
+  static const capturePeakLevel = 24.0;
 }

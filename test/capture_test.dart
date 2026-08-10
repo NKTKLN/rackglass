@@ -75,6 +75,21 @@ void main() {
     expect(fake.controller.state, CaptureState.streaming);
   });
 
+  test('a console is a picture, however dark it averages', () async {
+    final fake = FakeCapture();
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+
+    // Black background, a little bright text: mean 4.3, under the black level,
+    // which is exactly what a terminal looks like and exactly what this card
+    // spends its life pointed at. Judged on average brightness alone this
+    // raises NO SIGNAL over a picture that is plainly there.
+    await feed(fake, consoleFrame(), 5000);
+
+    expect(fake.controller.state, CaptureState.streaming);
+    expect(fake.controller.frame, isNotNull);
+  });
+
   test('dark frames either side of a stall do not raise the banner', () async {
     final fake = FakeCapture();
     addTearDown(fake.controller.dispose);
