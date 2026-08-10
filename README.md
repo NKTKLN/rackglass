@@ -10,6 +10,7 @@
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![V4L2](https://img.shields.io/badge/V4L2-MJPEG-555555?logo=linux&logoColor=white)](https://www.kernel.org/doc/html/latest/userspace-api/media/v4l/v4l2.html)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Made with Claude Code](https://img.shields.io/badge/Made%20with-Claude%20Code-D97757?logo=anthropic&logoColor=white)](https://claude.com/claude-code)
 
 **Rackglass** is a terminal-style Prometheus dashboard for a 7" 1024x600 panel
@@ -298,3 +299,7 @@ Anthropic's agentic coding tool. The measured figures in this README — capture
 bandwidth per mode, child-process CPU, the 0..300s staleness sawtooth — come
 from running against the real hardware and the live Prometheus server rather
 than from estimation.
+
+## 📜 License
+
+MIT. See [LICENSE](./LICENSE).
