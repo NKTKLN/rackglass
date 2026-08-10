@@ -11,7 +11,6 @@
 [![V4L2](https://img.shields.io/badge/V4L2-MJPEG-555555?logo=linux&logoColor=white)](https://www.kernel.org/doc/html/latest/userspace-api/media/v4l/v4l2.html)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
 [![Made with Claude Code](https://img.shields.io/badge/Made%20with-Claude%20Code-D97757?logo=anthropic&logoColor=white)](https://claude.com/claude-code)
-[![Homelab](https://img.shields.io/badge/homelab-NKTKLN-181717?logo=github&logoColor=white)](https://github.com/NKTKLN/homelab)
 
 **Rackglass** is a terminal-style Prometheus dashboard for a 7" 1024x600 panel
 sitting on a desk next to the rack. Plain Linux console look: black background,
@@ -206,7 +205,9 @@ each to Skia. Measured on the real device: 4–8% of one core for the child at
 The geometry is fixed rather than pickable. The card is flashed to offer
 1024x600, the panel's own resolution, so the source arrives at exactly the size
 the screen can show and nothing is captured only to be thrown away again on the
-way to the display. Re-measured on the card after that reflash, against the same
+way to the display. That firmware, and how it was put on the stick, are in
+[NKTKLN/ms2109-d7-1024x600](https://github.com/NKTKLN/ms2109-d7-1024x600) —
+stock firmware offers no mode narrower than 16:9 at this height. Re-measured on the card after that reflash, against the same
 source, every mode holds its rate:
 
 | Mode | fps | Stream | Frame |
