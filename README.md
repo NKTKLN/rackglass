@@ -200,19 +200,26 @@ other test stays green.
 The card on this desk (MACROSILICON `345f:2109`) exposes MJPG natively, so
 ffmpeg runs as a pure stream copy — nothing is decoded, scaled or re-encoded in
 the child process — and the app splits the concatenated JPEGs itself and hands
-each to Skia. Measured on the real device: ~1% CPU for the child at 1280x720@30.
+each to Skia. Measured on the real device: 4–8% of one core for the child at
+1024x600@30, all of it moving bytes rather than touching pixels.
 
-The geometry is fixed rather than pickable. A 16:9 source letterboxes into
-1024x576 on this panel, so 720 sits just above what the screen can show and
-downscales cleanly; 1080p costs three times the bandwidth and decode for detail
-the panel cannot display. Measured on the card, every mode holds its full rate:
+The geometry is fixed rather than pickable. The card is flashed to offer
+1024x600, the panel's own resolution, so the source arrives at exactly the size
+the screen can show and nothing is captured only to be thrown away again on the
+way to the display. Re-measured on the card after that reflash, against the same
+source, every mode holds its rate:
 
 | Mode | fps | Stream | Frame |
 | --- | --- | --- | --- |
-| 1920x1080@60 | 60.2 | 5.89 MB/s | 95 KB |
-| 1920x1080@30 | 30.2 | 2.96 MB/s | 95 KB |
-| 1280x720@30 | 30.2 | 1.33 MB/s | 42 KB |
-| 800x600@30 | 30.2 | 0.70 MB/s | 22 KB |
+| 1920x1080@30 | 30.1 | 10.23 MB/s | 332 KB |
+| 1280x720@30 | 30.1 | 5.98 MB/s | 194 KB |
+| **1024x600@30** | 29.1 | 4.42 MB/s | 148 KB |
+| 800x600@30 | 30.1 | 3.80 MB/s | 123 KB |
+
+The figures are what the firmware emits, not what the resolution implies: this
+card encodes at a generous quality, so a frame costs far more than a JPEG of
+that size usually would, and the decode the app pays per frame scales with it.
+Dropping from 720p to the panel's own 1024x600 takes about a third off both.
 
 The picture is letterboxed to fit and nothing else. The card scales the source
 into whatever mode it is asked for, so a 1:1 view magnified the capture rather

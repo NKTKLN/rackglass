@@ -68,13 +68,14 @@ class AppConfig {
 
   // ---- USB capture ---------------------------------------------------------
 
-  /// Capture geometry, fixed. 1280x720 is the deliberate choice for this
-  /// panel: 16:9 letterboxes into 1024x576, so 720 lands just above what the
-  /// screen can show and downscales cleanly, while 1080p would cost three
-  /// times the bandwidth and decode for detail the panel cannot display.
+  /// Capture geometry, fixed. The card is flashed to offer 1024x600, which is
+  /// the panel's own resolution: the source arrives at exactly the size the
+  /// screen can show, so nothing is captured that would only be thrown away
+  /// again on the way to the display. 720p cost a third more bandwidth and
+  /// decode for pixels this panel has nowhere to put.
   /// Override at build time if the source ever changes.
-  static const captureWidth = int.fromEnvironment('CAPTURE_W', defaultValue: 1280);
-  static const captureHeight = int.fromEnvironment('CAPTURE_H', defaultValue: 720);
+  static const captureWidth = int.fromEnvironment('CAPTURE_W', defaultValue: 1024);
+  static const captureHeight = int.fromEnvironment('CAPTURE_H', defaultValue: 600);
   static const captureFps = int.fromEnvironment('CAPTURE_FPS', defaultValue: 30);
 
   /// Binary used to pull frames off the V4L2 device.
