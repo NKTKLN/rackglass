@@ -1,0 +1,34 @@
+# arm64 build environment for rackglass, run under qemu on an x64 host.
+#
+# Flutter refuses to cross-build Linux x64 -> arm64 and ships no arm64 Linux
+# SDK archive, but the tool runs fine on an arm64 host: dart-sdk-linux-arm64
+# and the linux-arm64 GTK embedder both exist as engine artifacts. So this is
+# a native build that merely happens to be emulated.
+#
+# Debian bookworm on purpose: it is what Raspberry Pi OS is based on, and
+# building against the older glibc keeps the result runnable on newer targets.
+FROM debian:bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -qq && apt-get install -y -qq \
+      git curl unzip zip xz-utils ca-certificates \
+      clang cmake ninja-build pkg-config \
+      libgtk-3-dev liblzma-dev libstdc++-12-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 -b stable https://github.com/flutter/flutter.git /opt/flutter
+ENV PATH="/opt/flutter/bin:${PATH}"
+
+# Only Linux. Left to itself, precache also pulls the "universal" set, which
+# includes the Gradle wrapper — an Android artifact this build has no use for.
+RUN git config --global --add safe.directory /opt/flutter \
+    && git config --global --add safe.directory '*' \
+    && flutter config --no-analytics \
+         --enable-linux-desktop \
+         --no-enable-android \
+         --no-enable-web \
+         --no-enable-ios \
+         --no-enable-macos-desktop \
+         --no-enable-windows-desktop \
+    && flutter precache --linux --no-universal \
+    && flutter --version

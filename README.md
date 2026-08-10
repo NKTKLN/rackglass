@@ -152,6 +152,10 @@ RACKGLASS_FULLSCREEN=1 ./build/linux/x64/release/bundle/rackglass
 Without `RACKGLASS_FULLSCREEN` you get a normal 1024x600 window, which is the
 exact panel size — what you see while developing is what lands on the device.
 
+On a Raspberry Pi, see [docs/raspberry-pi.md](docs/raspberry-pi.md): Flutter
+will not cross-build for arm64, and a Pi 3B cannot give it the OpenGL it wants,
+so both the build and the display need arranging.
+
 ## 🧪 Tests
 
 ```sh
