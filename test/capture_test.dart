@@ -186,6 +186,33 @@ void main() {
     expect(fake.commands.last, containsAllInOrder(['-video_size', '1920x1080']));
   });
 
+  test('a configured node is the only one ever opened', () async {
+    final fake = FakeCapture(
+      configuredDevice: '/dev/video1',
+      retryDelay: const Duration(milliseconds: 30),
+      stderrText: '/dev/video1: Not a video capture device',
+      devices: const [
+        CaptureDevice('/dev/video0', 'UVC capture'),
+        CaptureDevice('/dev/video1', 'UVC metadata'),
+      ],
+    );
+    addTearDown(fake.controller.dispose);
+    await fake.controller.start();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(fake.commands.last, contains('/dev/video1'));
+
+    // Even rejected as a non-capture node, the search must not wander off to
+    // video0: the deployment named this one, and opening another would be
+    // showing a different input than the one that was asked for.
+    fake.spawned.first.exitWith(1);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(fake.controller.device?.path, '/dev/video1');
+    for (final cmd in fake.commands) {
+      expect(cmd, isNot(contains('/dev/video0')));
+    }
+  });
+
   test('automatic discovery skips a non-capture video node', () async {
     final fake = FakeCapture(
       stderrText: '/dev/video0: Not a video capture device',

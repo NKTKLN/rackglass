@@ -107,17 +107,22 @@ class FakeCapture {
     this.devices = const [
       CaptureDevice('/dev/video0', 'UVC Camera (345f:2109)'),
     ],
+    this.configuredDevice = '',
   });
 
   final String stderrText;
   final Duration retryDelay;
   final List<CaptureDevice> devices;
+  final String configuredDevice;
   final List<FakeProcess> spawned = [];
   final List<List<String>> commands = [];
 
   late final CaptureController controller = CaptureController(
     devices: devices,
     retryDelay: retryDelay,
+    // Empty means "scan and pick", which is what the discovery tests exercise.
+    // A test that wants the configured-node behaviour states a path itself.
+    configuredDevice: configuredDevice,
     spawn:
         (
           String executable,

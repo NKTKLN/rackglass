@@ -68,7 +68,14 @@ class CaptureController extends ChangeNotifier {
     this.spawn = Process.start,
     List<CaptureDevice>? devices,
     this.retryDelay = AppConfig.captureRetry,
+    this.configuredDevice = AppConfig.captureDevice,
   }) : _fixedDevices = devices;
+
+  /// The node to capture from, or empty to scan for one. When set, this is the
+  /// only node ever opened: the search that steps past a non-capture node is
+  /// there for an unknown stick, and applying it to a stated one would quietly
+  /// open something other than what the deployment asked for.
+  final String configuredDevice;
 
   /// Injected in tests.
   final Future<Process> Function(
@@ -165,7 +172,9 @@ class CaptureController extends ChangeNotifier {
   Future<void> discover() async {
     if (_fixedDevices != null) {
       _devices = _fixedDevices;
-      _device ??= _fixedDevices.isEmpty ? null : _fixedDevices.first;
+      if (!_applyConfiguredDevice()) {
+        _device ??= _fixedDevices.isEmpty ? null : _fixedDevices.first;
+      }
       if (!_disposed) notifyListeners();
       return;
     }
@@ -192,11 +201,29 @@ class CaptureController extends ChangeNotifier {
       }
     }
     _devices = found;
+    if (_applyConfiguredDevice()) {
+      if (!_disposed) notifyListeners();
+      return;
+    }
     if (_device == null || !found.any((d) => d.path == _device!.path)) {
       _device = found.isEmpty ? null : found.first;
       _devicePinned = false;
     }
     if (!_disposed) notifyListeners();
+  }
+
+  /// Pins [configuredDevice] when there is one, borrowing the sysfs name if the
+  /// scan happened to find that node. A configured node that is not present is
+  /// still used: it may be plugged in later, and reporting the failure against
+  /// the node that was actually asked for beats silently opening another.
+  bool _applyConfiguredDevice() {
+    if (configuredDevice.isEmpty) return false;
+    final known = _devices.where((d) => d.path == configuredDevice);
+    _device = known.isEmpty
+        ? CaptureDevice(configuredDevice, 'v4l2 device')
+        : known.first;
+    _devicePinned = true;
+    return true;
   }
 
   Future<void> start() async {

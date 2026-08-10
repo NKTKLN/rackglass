@@ -116,8 +116,9 @@ flutter run -d linux --dart-define=PROM_URL=http://10.0.0.5:9090
 | --- | --- | --- |
 | `PROM_URL` | `http://localhost:9090` | Prometheus base URL, no trailing slash |
 | `NET_DEVICE_EXCLUDE` | `^(lo\|veth.*\|tap.*\|fwbr.*\|fwln.*\|fwpr.*\|vmbr.*\|docker.*\|br-.*\|virbr.*)$` | Interfaces kept out of network totals |
-| `CAPTURE_W` | `1280` | Capture width requested from the card |
-| `CAPTURE_H` | `720` | Capture height |
+| `CAPTURE_DEVICE` | `/dev/video0` | V4L2 node to capture from; empty to scan for one |
+| `CAPTURE_W` | `1024` | Capture width requested from the card |
+| `CAPTURE_H` | `600` | Capture height |
 | `CAPTURE_FPS` | `30` | Capture frame rate |
 
 The default endpoint points at localhost on purpose: an unconfigured build
@@ -227,6 +228,13 @@ The picture is letterboxed to fit and nothing else. The card scales the source
 into whatever mode it is asked for, so a 1:1 view magnified the capture rather
 than revealing more of the source — it never held detail the fitted view did
 not.
+
+The node is named rather than discovered. A UVC stick exposes a capture node
+and a metadata node side by side, and which index each gets is up to the order
+the kernel probed them, so a reboot can swap them; on a panel with nobody in
+front of it, a list of nodes to choose between is no help. `CAPTURE_DEVICE`
+states which one it is, and nothing else is ever opened. Left empty it falls
+back to scanning `/dev/video*` and stepping past nodes that reject capture.
 
 Decoding keeps the newest frame and drops whatever arrived meanwhile; a queue
 would only ever show progressively staler video. The stream runs while CAPTURE

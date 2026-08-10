@@ -78,6 +78,19 @@ class AppConfig {
   static const captureHeight = int.fromEnvironment('CAPTURE_H', defaultValue: 600);
   static const captureFps = int.fromEnvironment('CAPTURE_FPS', defaultValue: 30);
 
+  /// The V4L2 node to capture from, named outright rather than guessed.
+  ///
+  /// A UVC stick exposes a capture node and a metadata node side by side, and
+  /// which index each gets is up to the order the kernel probed them — a
+  /// reboot can swap them. On a panel with nobody in front of it, picking the
+  /// node by hand is not an option, so the deployment states which one it is.
+  /// Set this empty to fall back to scanning `/dev/video*` and stepping past
+  /// nodes that turn out not to capture.
+  static const captureDevice = String.fromEnvironment(
+    'CAPTURE_DEVICE',
+    defaultValue: '/dev/video0',
+  );
+
   /// Binary used to pull frames off the V4L2 device.
   static const ffmpeg = String.fromEnvironment(
     'FFMPEG',

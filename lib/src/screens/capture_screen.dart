@@ -32,6 +32,18 @@ class CaptureScreen extends StatefulWidget {
 }
 
 class _CaptureScreenState extends State<CaptureScreen> {
+  /// Reported by the viewport after layout, so the control bar can state it on
+  /// the same line as the mode. Set from a post-frame callback rather than
+  /// during layout, which would be building a widget that is already built.
+  double? _fitPct;
+
+  void _reportFit(double pct) {
+    if (_fitPct != null && (_fitPct! - pct).abs() < 0.5) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _fitPct = pct);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +82,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
           controller: c,
           fullscreen: widget.fullscreen,
           onExitFullscreen: () => widget.onFullscreen(false),
+          onFit: _reportFit,
         );
 
         if (widget.fullscreen) return viewport;
@@ -78,6 +91,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
           children: [
             _ControlBar(
               controller: c,
+              fitPct: _fitPct,
               onFullscreen: () => widget.onFullscreen(true),
             ),
             const SizedBox(height: 6),
@@ -134,11 +148,13 @@ class _Viewport extends StatelessWidget {
     required this.controller,
     required this.fullscreen,
     required this.onExitFullscreen,
+    required this.onFit,
   });
 
   final CaptureController controller;
   final bool fullscreen;
   final VoidCallback onExitFullscreen;
+  final ValueChanged<double> onFit;
 
   /// Fullscreen hides the top bar, so the way out has to travel with whatever
   /// is on screen — including the states that have no picture. On the panel
@@ -207,7 +223,7 @@ class _Viewport extends StatelessWidget {
           Size(frame.width.toDouble(), frame.height.toDouble()),
           viewport,
         ).destination;
-        final nativeScale = frame.width / fitted.width;
+        onFit(fitted.width / frame.width * 100);
 
         return Stack(
           fit: StackFit.expand,
@@ -240,11 +256,6 @@ class _Viewport extends StatelessWidget {
                   ],
                 ),
               ),
-            Positioned(
-              left: 6,
-              bottom: 4,
-              child: _Overlay(controller: controller, nativeScale: nativeScale),
-            ),
             if (fullscreen)
               Positioned(
                 right: 6,
@@ -258,33 +269,6 @@ class _Viewport extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-/// Frame stats burned into the corner of the picture.
-class _Overlay extends StatelessWidget {
-  const _Overlay({required this.controller, required this.nativeScale});
-
-  final CaptureController controller;
-  final double nativeScale;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = controller;
-    final f = c.frame;
-    return Container(
-      color: TC.bg.withValues(alpha: 0.72),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Text(
-        '${f == null ? "--" : "${f.width}x${f.height}"} · '
-        '${c.fps.toStringAsFixed(1)} fps · '
-        'fit ${(100 / nativeScale).toStringAsFixed(0)}% · '
-        '${fmtBytes(c.bytesTotal.toDouble(), digits: 0)} in'
-        '${c.framesDropped > 0 ? " · ${c.framesDropped} dropped" : ""}'
-        '${c.decodeErrors > 0 ? " · ${c.decodeErrors} bad" : ""}',
-        style: ts(size: TZ.caption, color: TC.mid),
-      ),
     );
   }
 }
@@ -337,10 +321,15 @@ class _Message extends StatelessWidget {
 class _ControlBar extends StatelessWidget {
   const _ControlBar({
     required this.controller,
+    required this.fitPct,
     required this.onFullscreen,
   });
 
   final CaptureController controller;
+
+  /// How much of native size the picture is drawn at, reported by the viewport
+  /// once it has been laid out. Null until the first frame has been placed.
+  final double? fitPct;
   final VoidCallback onFullscreen;
 
   @override
@@ -358,22 +347,27 @@ class _ControlBar extends StatelessWidget {
           const SizedBox(width: 8),
           _Button(label: 'FULLSCREEN', selected: false, onTap: onFullscreen),
           const SizedBox(width: 14),
-          Text(
-            'mode: ${c.mode.label} · mjpeg',
-            style: ts(size: TZ.caption, color: TC.dim),
+          // The frame stats used to sit in a slab over the bottom of the
+          // picture, which is where the picture is. They belong on the same
+          // line as the mode they qualify, and the resolution is dropped: the
+          // mode already states it.
+          Expanded(
+            child: Text(
+              [
+                'mode: ${c.mode.label} · mjpeg',
+                if (c.running) '${c.fps.toStringAsFixed(1)} fps',
+                if (fitPct != null) 'fit ${fitPct!.toStringAsFixed(0)}%',
+                if (c.bytesTotal > 0)
+                  '${fmtBytes(c.bytesTotal.toDouble(), digits: 0)} in',
+                if (c.framesDropped > 0) '${c.framesDropped} dropped',
+                if (c.decodeErrors > 0) '${c.decodeErrors} bad',
+              ].join('  ·  '),
+              style: ts(size: TZ.caption, color: TC.dim),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          if (c.devices.length > 1) ...[
-            const SizedBox(width: 14),
-            for (final d in c.devices) ...[
-              _Button(
-                label: d.short,
-                selected: d.path == c.device?.path,
-                onTap: () => c.setDevice(d),
-              ),
-              const SizedBox(width: 4),
-            ],
-          ],
-          const Spacer(),
+          const SizedBox(width: 8),
           Text(
             c.uptime == null ? '' : 'up ${fmtDuration(c.uptime)}',
             style: ts(size: TZ.caption, color: TC.dim),
