@@ -99,12 +99,23 @@ It is baked in at build time, so getting it wrong means another build.
 
 ```sh
 LIBGL_ALWAYS_SOFTWARE=1 RACKGLASS_FULLSCREEN=1 \
-  xinit /opt/rackglass/bundle/rackglass -- :0 vt1 -nolisten tcp -nocursor
+  xinit /bin/sh -c '
+    xset s off
+    xset -dpms
+    xset s noblank
+    exec /opt/rackglass/bundle/rackglass
+  ' -- :0 vt1 -nolisten tcp -nocursor
 ```
 
 `-nocursor` is an X server option, so it goes after the `--`. It removes the
 pointer entirely, which is what a touch panel wants; `unclutter` only hides it
 until the next movement.
+
+The three `xset` calls stop the screen blanking. A dashboard that turns itself
+off after ten minutes is not a dashboard, and nothing here ever touches the
+keyboard to wake it. Note the absolute path to `sh`: `xinit` only treats its
+first argument as the client program if it begins with a slash or a dot, and
+otherwise hands it to `xterm`.
 
 As a service, so the panel comes up on power and can be driven over SSH:
 
@@ -117,7 +128,7 @@ After=systemd-user-sessions.service network-online.target
 User=nktkln
 Environment=LIBGL_ALWAYS_SOFTWARE=1
 Environment=RACKGLASS_FULLSCREEN=1
-ExecStart=/usr/bin/xinit /opt/rackglass/bundle/rackglass -- :0 vt1 -nolisten tcp -nocursor
+ExecStart=/usr/bin/xinit /bin/sh -c 'xset s off; xset -dpms; xset s noblank; exec /opt/rackglass/bundle/rackglass' -- :0 vt1 -nolisten tcp -nocursor
 Restart=always
 RestartSec=3
 StandardOutput=journal

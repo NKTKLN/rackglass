@@ -157,6 +157,23 @@ void main() {
         degenerate.add('"$label" rendered only ${label.trim().length} cells');
       }
     }
+    // Bars are painted rather than typed now, so they carry no Text to walk.
+    // A painted bar cannot drop its newest cell the way a text grid could —
+    // the fill is proportional — but it can still be handed more width than
+    // its box, so check that instead.
+    for (final el in find.byType(BarGauge).evaluate()) {
+      final render = el.renderObject as RenderBox;
+      if (!render.hasSize) continue;
+      inspected++;
+      final limit = render.constraints.maxWidth;
+      if (limit.isFinite && render.size.width > limit + 0.5) {
+        clipped.add(
+          'painted bar wants ${render.size.width.toStringAsFixed(1)}px '
+          'in ${limit.toStringAsFixed(1)}px',
+        );
+      }
+    }
+
     // Without this the check passes by finding nothing — a glyph added to the
     // bar alphabet, or a mode that stopped drawing gauges, would go unnoticed.
     expect(

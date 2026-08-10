@@ -8,11 +8,16 @@ abstract final class TC {
   static const bg = Color(0xFF000000);
   static const panelBg = Color(0xFF000000);
 
-  static const gridLine = Color(0xFF2E2E2E);
+  /// Rules and chart grid. Chosen against the panel, not a desktop monitor:
+  /// at 0xFF2E2E2E the separators on NODES were there in theory and invisible
+  /// in practice on a 7" screen viewed at an angle.
+  static const gridLine = Color(0xFF474747);
 
   /// Unfilled part of a bar gauge — visible enough that a 0% bar still reads
-  /// as an empty gauge rather than as nothing at all.
-  static const barTrack = Color(0xFF3C3C3C);
+  /// as an empty gauge rather than as nothing at all. Measured against the
+  /// panel rather than a desktop monitor, which is far more forgiving of dark
+  /// greys than a 7" screen at an angle.
+  static const barTrack = Color(0xFF4E4E4E);
   static const border = Color(0xFF565656);
   static const borderLit = Color(0xFFC8C8C8);
 

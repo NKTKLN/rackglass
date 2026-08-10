@@ -29,10 +29,18 @@ int _cellsFor(double maxWidth, double size, int? want) {
   return n < 1 ? 1 : n;
 }
 
-/// `████████▌░░░░░░` bar rendered as text, so it stays on the monospace grid.
+/// A bar drawn as rectangles, sized to the monospace grid it sits on.
 ///
-/// Sizes itself to the space it is given; [width] caps that rather than forcing
-/// it, so a bar can never render wider than its box.
+/// It used to be text — a run of `█` with `░` behind it — which looked right in
+/// a terminal and wrong on the panel. Two separate faults came from that: the
+/// shade glyph washed out to invisible at 16px, and a run of full blocks does
+/// not tile seamlessly, because each glyph lands on its own rounded pixel
+/// boundary and leaves hairline seams at irregular intervals. Painting the two
+/// rectangles directly removes both, keeps the exact same shape, and gives the
+/// fill sub-pixel width instead of eighth-of-a-cell steps.
+///
+/// Sizes itself to the space it is given; [width] caps that in cells rather
+/// than forcing it, so a bar can never render wider than its box.
 class BarGauge extends StatelessWidget {
   const BarGauge({
     super.key,
@@ -52,25 +60,67 @@ class BarGauge extends StatelessWidget {
     final c = color ?? TC.forPct(pct);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final text = barText(pct, _cellsFor(constraints.maxWidth, size, width));
-        // barText always emits fill first, then track, so one split colors both.
-        final cut = text.indexOf(RegExp(r'[░·]'));
-        final fill = cut < 0 ? text : text.substring(0, cut);
-        final track = cut < 0 ? '' : text.substring(cut);
-        return Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(text: fill, style: ts(size: size, color: c)),
-              TextSpan(text: track, style: ts(size: size, color: TC.barTrack)),
-            ],
-          ),
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.clip,
+        final cells = _cellsFor(constraints.maxWidth, size, width);
+        final probe = TextPainter(
+          text: TextSpan(text: '█', style: ts(size: size)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        return CustomPaint(
+          size: Size(cells * probe.width, probe.height),
+          painter: _BarPainter(pct: pct, fill: c, track: TC.barTrack),
         );
       },
     );
   }
+}
+
+class _BarPainter extends CustomPainter {
+  const _BarPainter({
+    required this.pct,
+    required this.fill,
+    required this.track,
+  });
+
+  final double? pct;
+  final Color fill;
+  final Color track;
+
+  /// Fraction of the line box the bar occupies, so it carries about the weight
+  /// a row of block characters did and sits on the same baseline as the text
+  /// beside it.
+  static const _weight = 0.72;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final h = size.height * _weight;
+    final top = (size.height - h) / 2;
+
+    // No reading is not the same as a zero reading, and an empty track would
+    // say the second. A rule through the middle says there is nothing to draw.
+    if (pct == null) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, size.height / 2 - 0.5, size.width, 1),
+        Paint()..color = track,
+      );
+      return;
+    }
+
+    canvas.drawRect(
+      Rect.fromLTWH(0, top, size.width, h),
+      Paint()..color = track,
+    );
+    final filled = (pct!.clamp(0, 100) / 100) * size.width;
+    if (filled > 0) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, top, filled, h),
+        Paint()..color = fill,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BarPainter old) =>
+      old.pct != pct || old.fill != fill || old.track != track;
 }
 
 /// Inline `▁▂▃▅▇` history strip, newest sample on the right.

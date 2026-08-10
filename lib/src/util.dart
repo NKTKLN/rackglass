@@ -5,15 +5,22 @@ library;
 const _eighths = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 const _sparkChars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
-/// A `████████▌░░░░░░` style bar with sub-cell resolution.
-String barText(double? pct, int width) {
-  if (pct == null) return '·' * width;
+/// A bar with sub-cell resolution, split into the filled part and the track
+/// behind it so the two can be coloured separately.
+///
+/// Both halves are solid blocks. The track used to be `░`, and a shade glyph
+/// asks the panel to render partial coverage at 16px — on the 7" screen the
+/// result washed out to almost nothing, so the empty part of a bar was
+/// invisible and a short bar looked like no bar at all. A solid block in a
+/// darker colour says the same thing without depending on the font.
+(String fill, String track) barCells(double? pct, int width) {
+  if (pct == null) return ('', '·' * width);
   final f = (pct.clamp(0, 100) / 100) * width;
   final full = f.floor();
   final rem = ((f - full) * 8).floor();
   final partial = full < width ? _eighths[rem] : '';
   final used = full + (partial.isEmpty ? 0 : 1);
-  return '█' * full + partial + '░' * (width - used).clamp(0, width);
+  return ('█' * full + partial, '█' * (width - used).clamp(0, width));
 }
 
 /// Inline sparkline from a value series.

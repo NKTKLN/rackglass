@@ -258,7 +258,7 @@ class _NodesScreenState extends State<NodesScreen> {
             title: 'targets',
             padding: const EdgeInsets.fromLTRB(6, TermPanel.titleGutter, 6, 6),
             child: ListView.builder(
-              padding: EdgeInsets.zero,
+              padding: const EdgeInsets.only(right: 8),
               itemCount: nodes.length,
               itemBuilder: (context, i) {
                 final n = nodes[i];
@@ -443,7 +443,8 @@ class _Detail extends StatelessWidget {
       // 7" panel can show at once, and clipping the bottom chart silently was
       // the alternative.
       child: ListView(
-        padding: EdgeInsets.zero,
+        // Right margin so the scrollbar sits beside the content, not on it.
+        padding: const EdgeInsets.only(right: 10),
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

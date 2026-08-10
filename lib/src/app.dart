@@ -12,7 +12,6 @@ import 'screens/nodes_screen.dart';
 import 'state/metrics_store.dart';
 import 'theme.dart';
 import 'util.dart';
-import 'widgets/blink_cursor.dart';
 
 enum AppMode {
   dash('DASH'),
@@ -124,7 +123,9 @@ class _RackglassAppState extends State<RackglassApp> {
       alignment: Alignment.center,
       // Lay everything out against the exact 1024x600 panel, then scale that
       // canvas to whatever window we actually got. Nothing can overflow.
-      child: FittedBox(
+      child: ScrollConfiguration(
+        behavior: const _PanelScrollBehavior(),
+        child: FittedBox(
         fit: BoxFit.contain,
         child: SizedBox(
           width: AppConfig.designWidth,
@@ -146,6 +147,7 @@ class _RackglassAppState extends State<RackglassApp> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -216,6 +218,28 @@ class _RackglassAppState extends State<RackglassApp> {
 }
 
 // ---------------------------------------------------------------------------
+
+/// A scrollbar narrow enough to live beside the content rather than on top of
+/// it. The default is sized for a mouse; this panel is driven by a finger, and
+/// the bar is only there to say how far down the list you are.
+class _PanelScrollBehavior extends ScrollBehavior {
+  const _PanelScrollBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return RawScrollbar(
+      controller: details.controller,
+      thickness: 3,
+      radius: Radius.zero,
+      thumbColor: TC.border,
+      child: child,
+    );
+  }
+}
 
 /// Fixed heights for the frame around the content, in design pixels.
 abstract final class Chrome {
@@ -327,8 +351,6 @@ class _StatusBarState extends State<_StatusBar> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          const BlinkCursor(size: TZ.small),
-          const SizedBox(width: 8),
           _Field(
             label: 'status',
             child: Text(
@@ -502,8 +524,6 @@ class _BootSplashState extends State<BootSplash> {
                   ],
                 ),
               ),
-            const SizedBox(height: 4),
-            const BlinkCursor(size: TZ.large),
             const Spacer(),
             Text('tap to skip', style: ts(size: TZ.caption, color: TC.dim)),
           ],

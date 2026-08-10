@@ -556,56 +556,35 @@ abstract final class _Table {
   static const root = _Column(id: 'root', width: 108, header: 'ROOT');
   static const uptime = _Column(
     id: 'uptime',
-    width: 56,
+    width: 72,
     header: 'UPTIME',
     right: true,
   );
-
-  /// Between column groups.
-  static const gap = 24.0;
-
-  /// Between a number and the bar that repeats it: they are one reading.
-  static const pad = 8.0;
-
-  /// After a bar, before the figures that follow it. Wider than [pad], because
-  /// the bar ends in a dark track and the two would otherwise touch.
-  static const barPad = 16.0;
-
-  /// Shares whatever width the fixed columns leave over, one equal portion per
-  /// group boundary. Handing the whole surplus to a single column or a single
-  /// spacer opened one conspicuous hole in the row; split evenly it reads as
-  /// breathing room between groups instead.
-  static const spread = 'spread';
 
   /// Keeps the last column off the panel frame. The first column needs no such
   /// margin: its content is a small dot inside a wide cell, so it already
   /// looks inset. A right-flushed number has no such slack of its own.
   static const tail = 14.0;
 
-  /// The running order. Doubles are fixed spacers, [flex] is the elastic one.
-  static const layout = <Object>[
+  /// The running order. Every gap between two columns is the same elastic
+  /// spacer, so the row's leftover width is shared equally and the spacing
+  /// adapts to whatever width the panel gives it.
+  ///
+  /// This replaced three hand-tuned constants. They encoded a real idea — a
+  /// number and the bar repeating it sit closer than two unrelated columns —
+  /// but every change to a column width meant re-balancing them by hand, and
+  /// the uptime column was clipped on the panel because one of those numbers
+  /// was half a character too small.
+  static const columns = <_Column>[
     dot,
     name,
-    gap,
-    spread,
     cpu,
-    pad,
     cpuBar,
-    gap,
-    spread,
     mem,
-    pad,
     memBar,
-    barPad,
-    spread,
     memText,
-    gap,
-    spread,
     root,
-    gap,
-    spread,
     uptime,
-    tail,
   ];
 }
 
@@ -680,22 +659,20 @@ class _TableHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final item in _Table.layout)
-          if (item is double)
-            SizedBox(width: item)
-          else if (item is String)
-            const Spacer()
-          else
-            _cell(
-              item as _Column,
-              key: ValueKey('head-${item.id}'),
-              child: Text(
-                item.header,
-                style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-              ),
+        for (var i = 0; i < _Table.columns.length; i++) ...[
+          if (i > 0) const Spacer(),
+          _cell(
+            _Table.columns[i],
+            key: ValueKey('head-${_Table.columns[i].id}'),
+            child: Text(
+              _Table.columns[i].header,
+              style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
+              maxLines: 1,
+              overflow: TextOverflow.clip,
             ),
+          ),
+        ],
+        const SizedBox(width: _Table.tail),
       ],
     );
   }
@@ -771,17 +748,15 @@ class _NodeRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final item in _Table.layout)
-            if (item is double)
-              SizedBox(width: item)
-            else if (item is String)
-              const Spacer()
-            else
-              _cell(
-                item as _Column,
-                key: ValueKey('cell-${item.id}-${n.instance}'),
-                child: content[item.id],
-              ),
+          for (var i = 0; i < _Table.columns.length; i++) ...[
+            if (i > 0) const Spacer(),
+            _cell(
+              _Table.columns[i],
+              key: ValueKey('cell-${_Table.columns[i].id}-${n.instance}'),
+              child: content[_Table.columns[i].id],
+            ),
+          ],
+          const SizedBox(width: _Table.tail),
         ],
       ),
     );
