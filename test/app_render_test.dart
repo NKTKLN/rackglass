@@ -132,30 +132,45 @@ void main() {
     );
   });
 
-  testWidgets('every header sits at the left edge of its column', (
+  testWidgets('every header spans exactly the columns it names', (
     tester,
   ) async {
     await pumpApp(tester);
 
     // Header and cell are keyed in pairs, so this compares the boxes rather
     // than whatever text happens to be inside them — a value can be flushed
-    // right inside its cell and still belong to a left-aligned heading.
-    for (final id in ['name', 'cpu', 'mem', 'root', 'uptime']) {
+    // right inside its cell and still belong to a heading centred over it.
+    //
+    // A heading that names several columns is pinned to the first and the last
+    // of them: `CPU` covers the number and its bar, `MEMORY` the percentage,
+    // its bar and the used/total pair. The header row computes its own
+    // geometry, so this is what keeps it in step with the rows.
+    const spans = <String, (String, String)>{
+      'name': ('name', 'name'),
+      'cpu': ('cpu', 'cpuBar'),
+      'mem': ('mem', 'memText'),
+      'root': ('root', 'root'),
+      'uptime': ('uptime', 'uptime'),
+    };
+
+    spans.forEach((id, span) {
       final head = find.byKey(ValueKey('head-$id'));
-      final cell = find.byKey(ValueKey('cell-$id-vm-node-1'));
+      final first = find.byKey(ValueKey('cell-${span.$1}-vm-node-1'));
+      final last = find.byKey(ValueKey('cell-${span.$2}-vm-node-1'));
       expect(head, findsOneWidget, reason: 'header $id');
-      expect(cell, findsOneWidget, reason: 'cell $id');
+      expect(first, findsOneWidget, reason: 'cell ${span.$1}');
+      expect(last, findsOneWidget, reason: 'cell ${span.$2}');
       expect(
         tester.getTopLeft(head).dx,
-        moreOrLessEquals(tester.getTopLeft(cell).dx, epsilon: 0.5),
-        reason: '$id header is not aligned with its column',
+        moreOrLessEquals(tester.getTopLeft(first).dx, epsilon: 0.5),
+        reason: '$id header does not start at its column',
       );
       expect(
         tester.getTopRight(head).dx,
-        moreOrLessEquals(tester.getTopRight(cell).dx, epsilon: 0.5),
-        reason: '$id header and column are different widths',
+        moreOrLessEquals(tester.getTopRight(last).dx, epsilon: 0.5),
+        reason: '$id header does not end at its column',
       );
-    }
+    });
   });
 
   testWidgets('the last column keeps clear of the panel frame', (

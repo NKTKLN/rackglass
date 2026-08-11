@@ -497,9 +497,7 @@ class _MemoryPanel extends StatelessWidget {
 /// One column of the node table: how wide it is, what it is called, and which
 /// side its content sits on. The header row and the data rows both read these,
 /// so a label cannot drift away from the values beneath it.
-/// One table cell, laid out from its column description. Header and row both
-/// go through this so a column can never be fixed in one and elastic in the
-/// other.
+/// One table cell, laid out from its column description.
 Widget _cell(
   _Column column, {
   required Key key,
@@ -517,6 +515,7 @@ class _Column {
     required this.id,
     required this.width,
     this.header = '',
+    this.span = 1,
     this.right = false,
   });
 
@@ -524,10 +523,16 @@ class _Column {
   final double width;
   final String header;
 
+  /// How many columns the heading names, counting this one. `CPU` is one
+  /// number and the bar repeating it; `MEMORY` is a percentage, its bar and the
+  /// used/total pair. The heading centres over the whole run, so it reads as
+  /// the name of that block rather than of the one narrow column it is
+  /// declared on.
+  final int span;
+
   /// Numbers are flushed right so their digits line up; names and compound
-  /// figures read left. The heading follows its column, so `CPU` sits over the
-  /// last digit of the percentage rather than floating off to the left of it
-  /// with the column's whole width in between.
+  /// figures read left. Headings ignore this and centre instead: a label names
+  /// its column, not the edge the values happen to sit on.
   final bool right;
 
   Alignment get align => right ? Alignment.centerRight : Alignment.centerLeft;
@@ -547,12 +552,19 @@ class _Column {
 abstract final class _Table {
   static const dot = _Column(id: 'dot', width: 24);
   static const name = _Column(id: 'name', width: 160, header: 'INSTANCE');
-  static const cpu = _Column(id: 'cpu', width: 52, header: 'CPU', right: true);
+  static const cpu = _Column(
+    id: 'cpu',
+    width: 52,
+    header: 'CPU',
+    span: 2,
+    right: true,
+  );
   static const cpuBar = _Column(id: 'cpuBar', width: 120, right: true);
   static const mem = _Column(
     id: 'mem',
     width: 56,
     header: 'MEMORY',
+    span: 3,
     right: true,
   );
   static const memBar = _Column(id: 'memBar', width: 120, right: true);
@@ -657,29 +669,60 @@ class _NodeTable extends StatelessWidget {
   }
 }
 
+/// The heading row.
+///
+/// A heading may cover several columns, so it cannot be a child of the same
+/// [Row] the cells are: a `Row` can only put a widget between two spacers, not
+/// across them. Instead the row's arithmetic is repeated once here — the gap
+/// between two columns is whatever is left over, shared equally — and each
+/// heading is placed at the span it names. The test pins these boxes to the
+/// cells beneath them, so the two layouts cannot drift apart unnoticed.
 class _TableHeader extends StatelessWidget {
   const _TableHeader();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < _Table.columns.length; i++) ...[
-          if (i > 0) const Spacer(),
-          _cell(
-            _Table.columns[i],
-            key: ValueKey('head-${_Table.columns[i].id}'),
-            child: Text(
-              _Table.columns[i].header,
-              style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-            ),
-          ),
-        ],
-        const SizedBox(width: _Table.tail),
-      ],
+    return LayoutBuilder(
+      builder: (context, box) {
+        const columns = _Table.columns;
+        final fixed =
+            columns.fold<double>(0, (sum, c) => sum + c.width) + _Table.tail;
+        final gap = math.max(0.0, (box.maxWidth - fixed) / (columns.length - 1));
+
+        // Left edge of every column, in the order the row lays them out.
+        final left = <double>[];
+        var x = 0.0;
+        for (final c in columns) {
+          left.add(x);
+          x += c.width + gap;
+        }
+
+        return Stack(
+          children: [
+            for (var i = 0; i < columns.length; i++)
+              if (columns[i].header.isNotEmpty)
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: left[i],
+                  width:
+                      left[i + columns[i].span - 1] +
+                      columns[i + columns[i].span - 1].width -
+                      left[i],
+                  child: Align(
+                    key: ValueKey('head-${columns[i].id}'),
+                    child: Text(
+                      columns[i].header,
+                      style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                    ),
+                  ),
+                ),
+          ],
+        );
+      },
     );
   }
 }
