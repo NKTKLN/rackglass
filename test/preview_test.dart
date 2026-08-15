@@ -68,6 +68,10 @@ void main() {
 
     if (tapMode != null) {
       await tester.tap(find.text(tapMode));
+      // Two frames: the first activates the screen and issues its range
+      // queries, the second draws what came back. One frame catches GRAPHS
+      // mid-load and shoots a screenful of NO DATA IN RANGE.
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
     }
     for (final t in thenTap) {

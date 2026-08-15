@@ -316,8 +316,19 @@ class _ChartPainter extends CustomPainter {
     }
     canvas.restore();
 
-    // Head marker on the most recent sample.
-    canvas.drawCircle(last, 2.4, Paint()..color = s.color);
+    // Head marker on the most recent sample, held inside the frame. The newest
+    // point sits exactly on plot.right, so a circle centred on it hangs half
+    // outside the chart — and this one is drawn after the clip is released,
+    // because clipping it would leave a half-moon instead.
+    const r = 2.4;
+    canvas.drawCircle(
+      Offset(
+        last.dx.clamp(plot.left + r, plot.right - r),
+        last.dy.clamp(plot.top + r, plot.bottom - r),
+      ),
+      r,
+      Paint()..color = s.color,
+    );
   }
 
   /// One `drawPoints` call for the whole dashed run.

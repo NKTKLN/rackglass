@@ -264,9 +264,13 @@ class FakePrometheus {
 
   Map<String, dynamic> _rangeFor(String q) {
     final end = _now;
+    // 15s apart, which is what MetricsStore asks for on a one-hour window: it
+    // aims at ~240 points per range. Sparser than that and TermChart treats
+    // every step as a real gap in the data and draws points with no line
+    // between them — the chart is right, the fixture was lying.
     List<List<Object>> pts(double base) => [
-      for (var i = 60; i >= 0; i--)
-        [end - i * 60, (base + (i % 7) - 3).toStringAsFixed(2)],
+      for (var i = 240; i >= 0; i--)
+        [end - i * 15, (base + (i % 7) - 3).toStringAsFixed(2)],
     ];
     if (q.contains('DCGM')) {
       return {
@@ -298,8 +302,8 @@ class FakePrometheus {
                 'path': path,
               },
               'values': [
-                for (var i = 60; i >= 0; i--)
-                  [end - i * 60, (base + (i % 5) * 1.0e6).toStringAsFixed(0)],
+                for (var i = 240; i >= 0; i--)
+                  [end - i * 15, (base + (i % 5) * 1.0e6).toStringAsFixed(0)],
               ],
             },
         ],
