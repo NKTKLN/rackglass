@@ -46,16 +46,26 @@ class DashboardScreen extends StatelessWidget {
           height: _panelRow,
           child: Row(
             children: [
-              SizedBox(width: 322, child: _CpuPanel(snap: snap, store: store)),
+              SizedBox(
+                width: 322,
+                child: _CpuPanel(snap: snap, store: store),
+              ),
               const SizedBox(width: 6),
-              SizedBox(width: 344, child: _GpuPanel(snap: snap, store: store)),
+              SizedBox(
+                width: 344,
+                child: _GpuPanel(snap: snap, store: store),
+              ),
               const SizedBox(width: 6),
-              Expanded(child: _MemoryPanel(snap: snap, store: store)),
+              Expanded(
+                child: _MemoryPanel(snap: snap, store: store),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 6),
-        Expanded(child: _NodeTable(snap: snap, store: store)),
+        Expanded(
+          child: _NodeTable(snap: snap, store: store),
+        ),
       ],
     );
 
@@ -89,6 +99,16 @@ class DashboardScreen extends StatelessWidget {
 // CPU / thermals
 // ---------------------------------------------------------------------------
 
+/// Gap the rule under the big number occupies, shared by all three panels so
+/// the separators line up across the row.
+const _ruleGap = 8.0;
+
+/// Height of the block above that rule. Pinned rather than left to the content:
+/// the three panels hang different things beside the big number — two sensor
+/// readings, three GPU clocks, nothing at all — and whichever stack is tallest
+/// would otherwise push its own rule down and break the line across the row.
+const _headerHeight = 58.0;
+
 class _CpuPanel extends StatelessWidget {
   const _CpuPanel({required this.snap, required this.store});
 
@@ -112,59 +132,74 @@ class _CpuPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: BigReading(
-                  value: pkg == null ? '--' : pkg.celsius.toStringAsFixed(1),
-                  unit: '°C',
-                  color: tempColor,
-                  caption: pkg?.label ?? 'no sensor',
+          SizedBox(
+            height: _headerHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: BigReading(
+                    value: pkg == null ? '--' : pkg.celsius.toStringAsFixed(1),
+                    unit: '°C',
+                    color: tempColor,
+                    caption: pkg?.label ?? 'no sensor',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // Fixed width, so a wide reading shrinks itself instead of
-              // colliding with the sensor list.
-              SizedBox(
-                width: 104,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (final t in snap.otherHostTemps.take(2))
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Text(
-                          '${t.label} ${fmtTemp(t.celsius, digits: 0)}',
-                          style: ts(
-                            size: TZ.small,
-                            color: TC.forTemp(t.celsius),
+                const SizedBox(width: 8),
+                // Fixed width, so a wide reading shrinks itself instead of
+                // colliding with the sensor list.
+                SizedBox(
+                  width: 104,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final t in snap.otherHostTemps.take(2))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            '${t.label} ${fmtTemp(t.celsius, digits: 0)}',
+                            style: ts(
+                              size: TZ.small,
+                              color: TC.forTemp(t.celsius),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const TermRule(),
-          StatLine(
-            label: 'USAGE',
-            value: fmtPct(host?.cpuPct),
-            valueColor: TC.forPct(host?.cpuPct),
-            size: TZ.body,
+          const TermRule(height: _ruleGap),
+          // UTIL, not USAGE: this is `100 - rate(idle)`, the share of time the
+          // cores were busy — the same kind of number the GPU panel labels
+          // UTIL. Memory keeps USED, because a level is not a share of time.
+          _InlineBar(
+            label: 'UTIL',
+            pct: host?.cpuPct,
+            value: fmtPct(host?.cpuPct, digits: 0),
           ),
-          const SizedBox(height: 3),
-          BarGauge(pct: host?.cpuPct, width: 30, size: TZ.body),
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Row(
             children: [
+              // Label dim, numbers mid — the split every other line on this
+              // screen uses. Painting the whole run one colour made LOAD the
+              // brightest label on the dashboard.
               Expanded(
-                child: Text(
-                  'LOAD ${fmtNum(host?.load1)} ${fmtNum(host?.load5)} ${fmtNum(host?.load15)}',
-                  style: ts(size: TZ.small, color: TC.mid),
+                child: Text.rich(
+                  TextSpan(
+                    style: ts(size: TZ.small, color: TC.dim),
+                    children: [
+                      const TextSpan(text: 'LOAD '),
+                      TextSpan(
+                        text:
+                            '${fmtNum(host?.load1)} ${fmtNum(host?.load5)} ${fmtNum(host?.load15)}',
+                        style: ts(size: TZ.small, color: TC.mid),
+                      ),
+                    ],
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -182,7 +217,10 @@ class _CpuPanel extends StatelessWidget {
           // unbounded width.
           Row(
             children: [
-              Text('TEMP', style: ts(size: TZ.caption, color: TC.dim)),
+              Text(
+                'TEMP',
+                style: ts(size: TZ.caption, color: TC.dim),
+              ),
               const SizedBox(width: 5),
               Expanded(
                 child: SparkText(
@@ -196,7 +234,10 @@ class _CpuPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text('CPU', style: ts(size: TZ.caption, color: TC.dim)),
+              Text(
+                'CPU',
+                style: ts(size: TZ.caption, color: TC.dim),
+              ),
               const SizedBox(width: 5),
               Expanded(
                 child: SparkText.percent(
@@ -252,53 +293,53 @@ class _GpuPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: BigReading(
-                  value: g.temp == null ? '--' : g.temp!.toStringAsFixed(0),
-                  unit: '°C',
-                  size: 34,
-                  color: tempColor,
-                  caption: stale
-                      ? 'LAST SEEN ${fmtDuration(g.age)} AGO'
-                      : 'core · mem ${fmtTemp(g.memTemp, digits: 0)}',
+          SizedBox(
+            height: _headerHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: BigReading(
+                    value: g.temp == null ? '--' : g.temp!.toStringAsFixed(0),
+                    unit: '°C',
+                    color: tempColor,
+                    caption: stale
+                        ? 'LAST SEEN ${fmtDuration(g.age)} AGO'
+                        : 'core · mem ${fmtTemp(g.memTemp, digits: 0)}',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 118,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${fmtNum(g.powerWatts, digits: 0)} W',
-                      style: ts(
-                        size: TZ.body,
-                        color: stale ? TC.dim : TC.bright,
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 118,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${fmtNum(g.powerWatts, digits: 0)} W',
+                        style: ts(
+                          size: TZ.body,
+                          color: stale ? TC.dim : TC.bright,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'SM ${fmtNum(g.smClockMhz, digits: 0)}MHz',
-                      style: ts(size: TZ.caption, color: TC.dim),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'MEM ${fmtNum(g.memClockMhz, digits: 0)}MHz',
-                      style: ts(size: TZ.caption, color: TC.dim),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                      Text(
+                        'SM ${fmtNum(g.smClockMhz, digits: 0)}MHz',
+                        style: ts(size: TZ.caption, color: TC.dim),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'MEM ${fmtNum(g.memClockMhz, digits: 0)}MHz',
+                        style: ts(size: TZ.caption, color: TC.dim),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const TermRule(height: 8),
-          // Label, bar and value on one line each: this panel carries more
-          // readings than its neighbours and has no room for stacked rows.
+          const TermRule(height: _ruleGap),
           _InlineBar(
             label: 'UTIL',
             pct: g.util,
@@ -312,52 +353,51 @@ class _GpuPanel extends StatelessWidget {
             value: fmtPct(g.fbPct, digits: 0),
             dimmed: stale,
           ),
-          const SizedBox(height: 2),
-          Text(
-            '${fmtBytes(g.fbUsedBytes)} of ${fmtBytes(g.fbTotalBytes)} used',
-            style: ts(
-              size: TZ.small,
-              color: stale ? TC.dim : TC.mid,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          // The byte pair behind the bar above, in the shape the memory panel
+          // gives swap: label left, `used / total` right, at context weight.
+          // Labelled USED rather than VRAM again — the bar directly above has
+          // already said which memory this is.
+          StatLine(
+            label: 'USED',
+            value: '${fmtBytes(g.fbUsedBytes)} / ${fmtBytes(g.fbTotalBytes)}',
+            contextColor: stale ? TC.dim : TC.mid,
+            emphasis: false,
           ),
           const Spacer(),
-          if (stale)
-            Text(
-              '! ${g.instance} exporter unreachable',
-              style: ts(size: TZ.caption, color: TC.red),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          else
-            // Same pair as the CPU panel. Stale readings are never recorded,
-            // so there is nothing to draw here while the exporter is down.
-            Row(
-              children: [
-                Text('TEMP', style: ts(size: TZ.caption, color: TC.dim)),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: SparkText(
-                    values: store.gpuTempHistory,
-                    size: TZ.body,
-                    color: tempColor,
-                    min: TZ.tempFloor,
-                    max: TZ.tempCeiling,
-                  ),
+          // Same pair as the CPU panel. Stale readings are never recorded, so
+          // the sparklines simply run empty while the exporter is down — the
+          // DOWN badge and the dimmed numbers already say that.
+          Row(
+            children: [
+              Text(
+                'TEMP',
+                style: ts(size: TZ.caption, color: TC.dim),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: SparkText(
+                  values: store.gpuTempHistory,
+                  size: TZ.body,
+                  color: tempColor,
+                  min: TZ.tempFloor,
+                  max: TZ.tempCeiling,
                 ),
-                const SizedBox(width: 8),
-                Text('UTIL', style: ts(size: TZ.caption, color: TC.dim)),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: SparkText.percent(
-                    values: store.gpuUtilHistory,
-                    size: TZ.body,
-                    color: TC.mid,
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'UTIL',
+                style: ts(size: TZ.caption, color: TC.dim),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: SparkText.percent(
+                  values: store.gpuUtilHistory,
+                  size: TZ.body,
+                  color: TC.mid,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -384,7 +424,10 @@ class _InlineBar extends StatelessWidget {
       children: [
         SizedBox(
           width: 48,
-          child: Text(label, style: ts(size: TZ.small, color: TC.dim)),
+          child: Text(
+            label,
+            style: ts(size: TZ.small, color: TC.dim),
+          ),
         ),
         Expanded(
           child: BarGauge(
@@ -427,32 +470,45 @@ class _MemoryPanel extends StatelessWidget {
     final host = snap.host;
     final total = host?.memTotal;
     final guestsReportingRam = snap.vms.where((n) => n.memTotal != null).length;
-    final guestTotalPct =
-        (guestsReportingRam > 0 && total != null && total > 0)
+    final guestTotalPct = (guestsReportingRam > 0 && total != null && total > 0)
         ? snap.vmMemReportedTotal / total * 100
         : null;
     final guestsReportingUsed = snap.vms.where((n) => n.memUsed != null).length;
+    final swapColor = TC.forPct(host?.swapPct);
 
     return TermPanel(
       title: 'memory',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          BigReading(
-            value: fmtBytes(host?.memUsed),
-            unit: '/ ${fmtBytes(total)}',
-            color: TC.forPct(host?.memPct),
-            caption: 'HOST RAM IN USE · ${fmtPct(host?.memPct, digits: 0)}',
-            size: 30,
+          SizedBox(
+            height: _headerHeight,
+            child: BigReading(
+              value: fmtBytes(host?.memUsed),
+              unit: '/ ${fmtBytes(total)}',
+              color: TC.forPct(host?.memPct),
+              caption: 'HOST RAM IN USE',
+            ),
           ),
-          const SizedBox(height: 4),
-          BarGauge(pct: host?.memPct, width: 30, size: TZ.body),
-          const TermRule(height: 8),
+          const TermRule(height: _ruleGap),
+          // Same shape as the bars next door: label, bar, percentage. The
+          // percentage used to live in the caption above, which put the one
+          // number the bar is drawing on the other side of the rule.
+          _InlineBar(
+            label: 'USED',
+            pct: host?.memPct,
+            value: fmtPct(host?.memPct, digits: 0),
+          ),
+          // Context lines, at the size and grey the CPU panel gives its load
+          // average: the reading this panel is about is the big number and its
+          // bar, and these three are what you look at afterwards.
           StatLine(
             label: 'SWAP',
             value: '${fmtBytes(host?.swapUsed)} / ${fmtBytes(host?.swapTotal)}',
-            valueColor: TC.forPct(host?.swapPct),
-            size: TZ.body,
+            valueColor: swapColor,
+            // Untouched swap is context like the rest. Swap actually in use is
+            // a reading, and takes back both the severity color and the weight.
+            emphasis: swapColor != TC.fg,
           ),
           StatLine(
             // This is the sum reported by guest operating systems. It is not
@@ -461,19 +517,20 @@ class _MemoryPanel extends StatelessWidget {
             value: guestsReportingRam == 0
                 ? '--'
                 : '${fmtBytes(snap.vmMemReportedTotal)} · ${fmtPct(guestTotalPct, digits: 0)}',
-            size: TZ.body,
             emphasis: false,
           ),
           StatLine(
             label: 'VM IN USE ($guestsReportingUsed)',
             value: guestsReportingUsed == 0 ? '--' : fmtBytes(snap.vmMemUsed),
-            size: TZ.body,
             emphasis: false,
           ),
           const Spacer(),
           Row(
             children: [
-              Text('RAM', style: ts(size: TZ.caption, color: TC.dim)),
+              Text(
+                'RAM',
+                style: ts(size: TZ.caption, color: TC.dim),
+              ),
               const SizedBox(width: 5),
               Expanded(
                 child: SparkText.percent(
@@ -498,11 +555,7 @@ class _MemoryPanel extends StatelessWidget {
 /// side its content sits on. The header row and the data rows both read these,
 /// so a label cannot drift away from the values beneath it.
 /// One table cell, laid out from its column description.
-Widget _cell(
-  _Column column, {
-  required Key key,
-  required Widget? child,
-}) {
+Widget _cell(_Column column, {required Key key, required Widget? child}) {
   return SizedBox(
     key: key,
     width: column.width,
@@ -517,6 +570,7 @@ class _Column {
     this.header = '',
     this.span = 1,
     this.right = false,
+    this.center = false,
   });
 
   final String id;
@@ -535,8 +589,17 @@ class _Column {
   /// its column, not the edge the values happen to sit on.
   final bool right;
 
-  Alignment get align => right ? Alignment.centerRight : Alignment.centerLeft;
-  TextAlign get textAlign => right ? TextAlign.right : TextAlign.left;
+  /// Centred instead, under a heading that centres over the same box. For a
+  /// column whose values are a compact phrase rather than digits to compare
+  /// down the column: uptime reads `2d 3h` beside `12m 4s`, and neither edge
+  /// of that is worth lining up.
+  final bool center;
+
+  Alignment get align => center
+      ? Alignment.center
+      : (right ? Alignment.centerRight : Alignment.centerLeft);
+  TextAlign get textAlign =>
+      center ? TextAlign.center : (right ? TextAlign.right : TextAlign.left);
 }
 
 /// The table, declared once.
@@ -568,15 +631,17 @@ abstract final class _Table {
     right: true,
   );
   static const memBar = _Column(id: 'memBar', width: 120, right: true);
+
   /// Both this and [root] hold a `used/total` pair, and `fmtBytes` caps each
   /// side at five characters, so eleven is the widest either can get.
   static const memText = _Column(id: 'memText', width: 112);
   static const root = _Column(id: 'root', width: 108, header: 'ROOT');
+
   static const uptime = _Column(
     id: 'uptime',
     width: 72,
     header: 'UPTIME',
-    right: true,
+    center: true,
   );
 
   /// Keeps the last column off the panel frame. The first column needs no such
@@ -687,7 +752,10 @@ class _TableHeader extends StatelessWidget {
         const columns = _Table.columns;
         final fixed =
             columns.fold<double>(0, (sum, c) => sum + c.width) + _Table.tail;
-        final gap = math.max(0.0, (box.maxWidth - fixed) / (columns.length - 1));
+        final gap = math.max(
+          0.0,
+          (box.maxWidth - fixed) / (columns.length - 1),
+        );
 
         // Left edge of every column, in the order the row lays them out.
         final left = <double>[];
@@ -713,7 +781,11 @@ class _TableHeader extends StatelessWidget {
                     key: ValueKey('head-${columns[i].id}'),
                     child: Text(
                       columns[i].header,
-                      style: ts(size: TZ.caption, color: TC.dim, letterSpacing: 1),
+                      style: ts(
+                        size: TZ.caption,
+                        color: TC.dim,
+                        letterSpacing: 1,
+                      ),
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.clip,
@@ -781,7 +853,7 @@ class _NodeRow extends StatelessWidget {
       'uptime': MaybeText(
         fmtDuration(n.uptime),
         present: n.bootTime != null,
-        align: TextAlign.right,
+        align: _Table.uptime.textAlign,
         color: TC.mid,
       ),
     };

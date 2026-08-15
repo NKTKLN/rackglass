@@ -85,8 +85,12 @@ abstract final class TZ {
   /// Screen title.
   static const title = 20.0;
 
-  /// The one big number per panel.
-  static const huge = 40.0;
+  /// The one big number per panel. A single value, not a per-panel choice: the
+  /// three dashboard panels sit side by side, and a bigger number in one of
+  /// them reads as "this one matters more" rather than as "this one is wider".
+  /// Sized so the longest of the three — memory's `used / total` pair — still
+  /// fits its column without the fit logic shrinking it below its neighbours.
+  static const huge = 34.0;
 
   /// Fixed band for temperature sparklines, in Celsius. Wide enough to cover a
   /// cold idle and a throttling die, so the strip reports the real level

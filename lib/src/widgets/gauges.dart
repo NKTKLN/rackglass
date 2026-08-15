@@ -182,6 +182,7 @@ class StatLine extends StatelessWidget {
     required this.label,
     required this.value,
     this.valueColor = TC.bright,
+    this.contextColor = TC.mid,
     this.labelColor = TC.dim,
     this.size = TZ.small,
     this.trailing,
@@ -191,12 +192,19 @@ class StatLine extends StatelessWidget {
   final String label;
   final String value;
   final Color valueColor;
+
+  /// Colour a non-emphasis line uses. The default is the grey the CPU panel
+  /// gives its load average; a panel whose readings have gone stale overrides
+  /// it so its context lines dim with everything else.
+  final Color contextColor;
   final Color labelColor;
   final double size;
   final Widget? trailing;
 
   /// Values read brighter and heavier than their labels by default. Turn it
-  /// off for figures that are context rather than a reading you act on.
+  /// off for figures that are context rather than a reading you act on: those
+  /// drop to [contextColor] at normal weight, and [valueColor] is ignored — a
+  /// line that is context does not get to carry severity as well.
   final bool emphasis;
 
   @override
@@ -216,7 +224,7 @@ class StatLine extends StatelessWidget {
           value,
           style: ts(
             size: size,
-            color: emphasis ? valueColor : TC.fg,
+            color: emphasis ? valueColor : contextColor,
             weight: emphasis ? FontWeight.w500 : FontWeight.w400,
           ),
           maxLines: 1,

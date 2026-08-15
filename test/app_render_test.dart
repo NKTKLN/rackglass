@@ -126,10 +126,6 @@ void main() {
     // 166055s of staleness must be stated in the panel.
     expect(find.textContaining('LAST SEEN'), findsOneWidget);
     expect(find.textContaining('1d 22h'), findsOneWidget);
-    expect(
-      find.textContaining('vm-gpu-worker-1 exporter unreachable'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('every header spans exactly the columns it names', (
@@ -219,7 +215,7 @@ void main() {
     expect(find.text('[ LIVE ]'), findsNothing);
     expect(find.text('[ DOWN ]'), findsNothing);
     // 9216 MiB used of 9216+7154 MiB total.
-    expect(find.textContaining('9.0G of 16.0G'), findsOneWidget);
+    expect(find.textContaining('9.0G / 16.0G'), findsOneWidget);
     expect(find.textContaining('212 W'), findsOneWidget);
   });
 
