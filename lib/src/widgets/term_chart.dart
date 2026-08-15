@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/widgets.dart';
 
@@ -99,9 +100,15 @@ class _Legend extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 10),
                 child: Row(
                   children: [
-                    Text('─', style: ts(size: TZ.body, color: s.color)),
+                    Text(
+                      '─',
+                      style: ts(size: TZ.body, color: s.color),
+                    ),
                     const SizedBox(width: 3),
-                    Text(s.label, style: ts(size: TZ.caption, color: TC.mid)),
+                    Text(
+                      s.label,
+                      style: ts(size: TZ.caption, color: TC.mid),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${fmtNum(s.points.last.v, digits: 1)}$unit',
@@ -193,7 +200,8 @@ class _ChartPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
-        ..color = TC.border,
+        ..color = TC.border
+        ..isAntiAlias = false,
     );
   }
 
@@ -204,9 +212,12 @@ class _ChartPainter extends CustomPainter {
     double hi,
     double Function(double) xOf,
   ) {
+    // Every dash is horizontal or vertical: antialiasing has nothing to smooth
+    // here, and on the panel it is coverage work llvmpipe does per pixel.
     final dash = Paint()
       ..color = TC.gridLine
-      ..strokeWidth = 1;
+      ..strokeWidth = 1
+      ..isAntiAlias = false;
 
     for (var i = 0; i <= yTicks; i++) {
       final f = i / yTicks;
@@ -228,9 +239,7 @@ class _ChartPainter extends CustomPainter {
       if (i > 0 && i < xTicks) {
         _dashedLine(canvas, Offset(x, plot.top), Offset(x, plot.bottom), dash);
       }
-      final ago = Duration(
-        seconds: ((1 - f) * window.inSeconds).round(),
-      );
+      final ago = Duration(seconds: ((1 - f) * window.inSeconds).round());
       _label(
         canvas,
         i == xTicks ? 'now' : fmtAgoShort(ago),
@@ -311,24 +320,42 @@ class _ChartPainter extends CustomPainter {
     canvas.drawCircle(last, 2.4, Paint()..color = s.color);
   }
 
+  /// One `drawPoints` call for the whole dashed run.
+  ///
+  /// This used to be a `drawLine` per dash: a grid line across a 600px plot is
+  /// about 85 of them, and a chart draws eight such lines, so a repaint issued
+  /// some 700 separate draw calls before a single sample was plotted. On the
+  /// panel that is llvmpipe setting up 700 antialiased rasterisations on a
+  /// 1.2 GHz core. The same dashes as one point list cost one.
   void _dashedLine(Canvas canvas, Offset a, Offset b, Paint paint) {
     const on = 3.0, off = 4.0;
     final total = (b - a).distance;
     if (total <= 0) return;
     final dir = (b - a) / total;
+    final ends = <Offset>[];
     var t = 0.0;
     while (t < total) {
       final end = math.min(t + on, total);
-      canvas.drawLine(a + dir * t, a + dir * end, paint);
+      ends.add(a + dir * t);
+      ends.add(a + dir * end);
       t = end + off;
     }
+    canvas.drawPoints(PointMode.lines, ends, paint);
   }
 
   void _label(Canvas canvas, String text, Offset at, {required _Align align}) {
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: ts(size: TZ.caption, color: TC.dim)),
-      textDirection: TextDirection.ltr,
-    )..layout();
+    // Tick labels repeat across repaints and across the four charts on a
+    // screen — `now`, `-6h`, `50` — so lay each string out once.
+    // A y-range that drifts mints new strings, so cap the cache rather than
+    // let a panel that has been up for a month accumulate them.
+    if (_labelCache.length > 128) _labelCache.clear();
+    final tp = _labelCache.putIfAbsent(
+      text,
+      () => TextPainter(
+        text: TextSpan(text: text, style: ts(size: TZ.caption, color: TC.dim)),
+        textDirection: TextDirection.ltr,
+      )..layout(),
+    );
     final o = switch (align) {
       _Align.right => Offset(at.dx - tp.width, at.dy - tp.height / 2),
       _Align.left => Offset(at.dx, at.dy),
@@ -350,3 +377,9 @@ class _ChartPainter extends CustomPainter {
 }
 
 enum _Align { right, left, centerTop, rightTop }
+
+/// Laid-out tick labels, keyed by their text. Axis labels come from a small
+/// vocabulary — the time ticks repeat exactly, and the value ticks repeat
+/// whenever the y-range holds still — so this settles at a few dozen entries
+/// on a panel that runs for weeks.
+final _labelCache = <String, TextPainter>{};

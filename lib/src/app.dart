@@ -227,6 +227,10 @@ class _PanelScrollBehavior extends ScrollBehavior {
   const _PanelScrollBehavior();
 
   @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const _PanelScrollPhysics();
+
+  @override
   Widget buildScrollbar(
     BuildContext context,
     Widget child,
@@ -240,6 +244,25 @@ class _PanelScrollBehavior extends ScrollBehavior {
       child: child,
     );
   }
+}
+
+/// Clamping physics with the throw taken out of it.
+///
+/// A fling is the most expensive thing this app ever asks for: the panel draws
+/// through llvmpipe on the Pi's CPU, so every frame of coasting is a full
+/// 1024x600 software repaint, and the default 8000 px/s cap turns one flick
+/// into seconds of them. Capping the launch velocity shortens the coast to
+/// roughly the length of the gesture itself — the list still scrolls freely,
+/// it just stops when your finger does rather than sailing on.
+class _PanelScrollPhysics extends ClampingScrollPhysics {
+  const _PanelScrollPhysics({super.parent});
+
+  @override
+  _PanelScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      _PanelScrollPhysics(parent: buildParent(ancestor));
+
+  @override
+  double get maxFlingVelocity => 1200;
 }
 
 /// Fixed heights for the frame around the content, in design pixels.

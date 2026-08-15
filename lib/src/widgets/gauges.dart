@@ -18,16 +18,32 @@ int _cellsFor(double maxWidth, double size, int? want) {
     'a gauge with an unbounded width needs an explicit width cap — wrap it in '
     'an Expanded/SizedBox, or pass width:',
   );
-  final probe = TextPainter(
-    text: TextSpan(text: '█', style: ts(size: size)),
-    textDirection: TextDirection.ltr,
-  )..layout();
-  final advance = probe.width;
+  final advance = _cell(size).width;
   if (advance <= 0 || !maxWidth.isFinite) return want ?? 8;
   final fits = (maxWidth / advance).floor();
   final n = want == null ? fits : (fits < want ? fits : want);
   return n < 1 ? 1 : n;
 }
+
+/// Size of one `█` at [size], measured once per size and kept.
+///
+/// This is a constant of the font and the size, but working it out means laying
+/// out a glyph, and every bar and every sparkline used to do that on every
+/// build — twice, in the bar's case, once to count the cells and once to size
+/// the canvas. On the panel, where llvmpipe draws the whole interface on the
+/// CPU, that shaping work sat directly in the scroll frame budget.
+Size _cell(double size) {
+  final hit = _cellCache[size];
+  if (hit != null) return hit;
+  final probe = TextPainter(
+    text: TextSpan(text: '█', style: ts(size: size)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  return _cellCache[size] = Size(probe.width, probe.height);
+}
+
+/// Keyed by font size, of which this app uses six.
+final _cellCache = <double, Size>{};
 
 /// A bar drawn as rectangles, sized to the monospace grid it sits on.
 ///
@@ -60,13 +76,10 @@ class BarGauge extends StatelessWidget {
     final c = color ?? TC.forPct(pct);
     return LayoutBuilder(
       builder: (context, constraints) {
+        final cell = _cell(size);
         final cells = _cellsFor(constraints.maxWidth, size, width);
-        final probe = TextPainter(
-          text: TextSpan(text: '█', style: ts(size: size)),
-          textDirection: TextDirection.ltr,
-        )..layout();
         return CustomPaint(
-          size: Size(cells * probe.width, probe.height),
+          size: Size(cells * cell.width, cell.height),
           painter: _BarPainter(pct: pct, fill: c, track: TC.barTrack),
         );
       },
@@ -94,27 +107,29 @@ class _BarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final h = size.height * _weight;
     final top = (size.height - h) / 2;
+    // Both rectangles are axis-aligned, so antialiasing has no edge to smooth
+    // and only costs the panel's software rasteriser coverage work per pixel.
+    final fillPaint = Paint()
+      ..color = fill
+      ..isAntiAlias = false;
+    final trackPaint = Paint()
+      ..color = track
+      ..isAntiAlias = false;
 
     // No reading is not the same as a zero reading, and an empty track would
     // say the second. A rule through the middle says there is nothing to draw.
     if (pct == null) {
       canvas.drawRect(
         Rect.fromLTWH(0, size.height / 2 - 0.5, size.width, 1),
-        Paint()..color = track,
+        trackPaint,
       );
       return;
     }
 
-    canvas.drawRect(
-      Rect.fromLTWH(0, top, size.width, h),
-      Paint()..color = track,
-    );
+    canvas.drawRect(Rect.fromLTWH(0, top, size.width, h), trackPaint);
     final filled = (pct!.clamp(0, 100) / 100) * size.width;
     if (filled > 0) {
-      canvas.drawRect(
-        Rect.fromLTWH(0, top, filled, h),
-        Paint()..color = fill,
-      );
+      canvas.drawRect(Rect.fromLTWH(0, top, filled, h), fillPaint);
     }
   }
 
@@ -278,7 +293,10 @@ class BigReading extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Text(unit, style: ts(size: size * 0.45, color: color)),
+              Text(
+                unit,
+                style: ts(size: size * 0.45, color: color),
+              ),
             ],
           ),
         ),
@@ -337,11 +355,7 @@ class MaybeText extends StatelessWidget {
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.ellipsis,
-      style: ts(
-        size: size,
-        color: present ? color : TC.dim,
-        weight: weight,
-      ),
+      style: ts(size: size, color: present ? color : TC.dim, weight: weight),
     );
   }
 }
