@@ -41,7 +41,8 @@ abstract final class Q {
       '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100)';
   static const cpuIoWait =
       'avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[2m])) * 100';
-  static const cores = 'count by (instance) (node_cpu_seconds_total{mode="idle"})';
+  static const cores =
+      'count by (instance) (node_cpu_seconds_total{mode="idle"})';
 
   static const memTotal = 'node_memory_MemTotal_bytes';
   static const memAvailable = 'node_memory_MemAvailable_bytes';
@@ -138,6 +139,12 @@ abstract final class Q {
   /// is what the number means anyway: the last measurement still stands.
   static const rangeSpeedtestDown =
       'last_over_time(speedtest_download_bits_per_second[1h])';
+
+  /// Same treatment for the other direction. The exporter measures both in one
+  /// run, so an upload point exists for every download point and the two share
+  /// an axis honestly.
+  static const rangeSpeedtestUp =
+      'last_over_time(speedtest_upload_bits_per_second[1h])';
 
   static const rangeSpeedtestLatency =
       'last_over_time(speedtest_latency_seconds[1h])';

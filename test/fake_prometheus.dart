@@ -283,11 +283,14 @@ class FakePrometheus {
         ],
       };
     }
-    if (q.contains('speedtest_download')) {
+    if (q.contains('speedtest_download') || q.contains('speedtest_upload')) {
+      final up = q.contains('speedtest_upload');
       return {
         'resultType': 'matrix',
         'result': [
-          for (final (path, base) in [('direct', 222.0e6), ('socks', 165.0e6)])
+          for (final (path, base) in up
+              ? [('direct', 431.0e6), ('socks', 66.0e6)]
+              : [('direct', 222.0e6), ('socks', 165.0e6)])
             {
               'metric': {
                 'instance': 'vm-ops-node',

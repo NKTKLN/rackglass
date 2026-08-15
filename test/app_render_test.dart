@@ -245,11 +245,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(prometheus.rangeCalls, greaterThanOrEqualTo(6));
+    expect(prometheus.rangeCalls, greaterThanOrEqualTo(7));
     expect(find.text('UTILISATION %'), findsOneWidget);
     expect(find.text('TEMPERATURE °C'), findsOneWidget);
     expect(find.text('MEMORY USED %'), findsOneWidget);
-    expect(find.text('SPEEDTEST DOWN · MBIT/S'), findsOneWidget);
+    expect(find.text('SPEEDTEST ↓↑ · MBIT/S'), findsOneWidget);
+    // Both directions land on the chart, one line per path per direction.
+    for (final legend in ['direct ↓', 'socks ↓', 'direct ↑', 'socks ↑']) {
+      expect(find.text(legend), findsOneWidget, reason: legend);
+    }
     expect(find.text('NO DATA IN RANGE'), findsNothing);
 
     // Switching the window re-queries at a coarser step.

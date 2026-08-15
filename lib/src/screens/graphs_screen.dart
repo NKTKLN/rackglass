@@ -22,11 +22,7 @@ const _windows = <(String, Duration)>[
 
 /// Four range-query charts on a 2x2 grid: CPU, temperature, memory, network.
 class GraphsScreen extends StatefulWidget {
-  const GraphsScreen({
-    super.key,
-    required this.store,
-    required this.active,
-  });
+  const GraphsScreen({super.key, required this.store, required this.active});
 
   final MetricsStore store;
   final bool active;
@@ -49,6 +45,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
   List<PromSeries> _gpuUtil = const [];
   List<PromSeries> _mem = const [];
   List<PromSeries> _speedtest = const [];
+  List<PromSeries> _speedtestUp = const [];
 
   Duration get _window => _windows[_windowIndex].$2;
 
@@ -101,6 +98,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
         widget.store.loadRange(Q.rangeGpuUtil, window, end: queryEnd),
         widget.store.loadRange(Q.rangeMemPct, window, end: queryEnd),
         widget.store.loadRange(Q.rangeSpeedtestDown, window, end: queryEnd),
+        widget.store.loadRange(Q.rangeSpeedtestUp, window, end: queryEnd),
       ]);
       if (!mounted ||
           !widget.active ||
@@ -115,6 +113,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
         _gpuUtil = r[3];
         _mem = r[4];
         _speedtest = r[5];
+        _speedtestUp = r[6];
         _queryEnd = queryEnd;
         _loading = false;
       });
@@ -143,10 +142,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
       for (final s in _mem) s.instance ?? '?',
     }.toList()..sort();
     for (final key in nodes) {
-      _nodeColors.putIfAbsent(
-        key,
-        () => TC.nodeSeriesAt(_nodeColors.length),
-      );
+      _nodeColors.putIfAbsent(key, () => TC.nodeSeriesAt(_nodeColors.length));
     }
 
     final gpus = <String>{
@@ -156,12 +152,24 @@ class _GraphsScreenState extends State<GraphsScreen> {
       _gpuColors.putIfAbsent(key, () => TC.gpuSeriesAt(_gpuColors.length));
     }
 
-    final paths = <String>{for (final s in _speedtest) _pathOf(s)}.toList()
-      ..sort();
+    // Direction is part of the key: four lines share this chart, and a path
+    // drawn in one colour for both directions would be two lines nobody can
+    // tell apart at a glance.
+    final paths = <String>{
+      for (final s in _speedtest) _speedKey(s, _down),
+      for (final s in _speedtestUp) _speedKey(s, _up),
+    }.toList()..sort();
     for (final key in paths) {
       _pathColors.putIfAbsent(key, () => TC.nodeSeriesAt(_pathColors.length));
     }
   }
+
+  static const _down = '↓';
+  static const _up = '↑';
+
+  /// Legend key for one speedtest line: which route, which direction.
+  String _speedKey(PromSeries s, String direction) =>
+      '${_pathOf(s)} $direction';
 
   /// Which route the measurement went over — the exporter runs the same test
   /// direct and through the proxy, and the gap between them is the point.
@@ -290,7 +298,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
                     const SizedBox(height: 6),
                     Expanded(
                       child: TermPanel(
-                        title: 'speedtest down · Mbit/s',
+                        title: 'speedtest ↓↑ · Mbit/s',
                         padding: const EdgeInsets.fromLTRB(
                           6,
                           TermPanel.titleGutter,
@@ -299,17 +307,22 @@ class _GraphsScreenState extends State<GraphsScreen> {
                         ),
                         child: TermChart(
                           series: [
-                            for (final s in _speedtest)
-                              ChartSeries(
-                                _pathOf(s),
-                                [
-                                  // The exporter reports bits; the number
-                                  // people quote for a link is Mbit/s decimal.
-                                  for (final p in s.points)
-                                    PromPoint(p.t, p.v / 1e6),
-                                ],
-                                _pathColors[_pathOf(s)] ?? TC.fg,
-                              ),
+                            for (final (dir, list) in [
+                              (_down, _speedtest),
+                              (_up, _speedtestUp),
+                            ])
+                              for (final s in list)
+                                ChartSeries(
+                                  _speedKey(s, dir),
+                                  [
+                                    // The exporter reports bits; the number
+                                    // people quote for a link is Mbit/s
+                                    // decimal.
+                                    for (final p in s.points)
+                                      PromPoint(p.t, p.v / 1e6),
+                                  ],
+                                  _pathColors[_speedKey(s, dir)] ?? TC.fg,
+                                ),
                           ],
                           window: _window,
                           endTime: _queryEnd,
