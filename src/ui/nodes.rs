@@ -1,6 +1,7 @@
 use super::{
     AppWindow,
     chart::{Chart, ChartCache},
+    layout::*,
     scene::*,
 };
 use crate::{
@@ -75,7 +76,7 @@ pub fn update(
         let y = i as f32 * stride;
         let selected = target.instance == node.instance;
         if selected {
-            targets.rect(0., y, 242., tile_height, WHITE);
+            targets.rect(0., y, TARGET_WIDTH, tile_height, WHITE);
         }
         targets.text(
             7.,
@@ -193,10 +194,14 @@ pub fn update(
             ("uptime", fmt_duration(node.uptime())),
         ],
     );
-    detail.rect(0., 160., 714., 1., GRID);
+    detail.rect(0., 160., DETAIL_WIDTH, 1., GRID);
     let sensors = snapshot.temps_for(&node.instance);
     let gpus = snapshot.gpus_for(&node.instance);
-    let net_width = if sensors.is_empty() { 714. } else { 280. };
+    let net_width = if sensors.is_empty() {
+        DETAIL_WIDTH
+    } else {
+        280.
+    };
     detail.caption(0., 167.5, net_width, "NETWORK");
     detail.stat(
         0.,
@@ -263,9 +268,9 @@ pub fn update(
     }
     let mut y = 300.5;
     if !gpus.is_empty() {
-        detail.rect(0., y + 6.5, 714., 1., GRID);
+        detail.rect(0., y + 6.5, DETAIL_WIDTH, 1., GRID);
         y += 14.;
-        detail.caption(0., y, 714., "GPU");
+        detail.caption(0., y, DETAIL_WIDTH, "GPU");
         y += 20.9;
         for gpu in &gpus {
             let title = format!("gpu{} · {}", gpu.gpu, gpu.model_short());
@@ -275,7 +280,7 @@ pub fn update(
                 detail.text(
                     title_width + 8.,
                     y + 1.95,
-                    714. - title_width - 8.,
+                    DETAIL_WIDTH - title_width - 8.,
                     gpu.age()
                         .map(|a| format!("[ DOWN · {} OLD ]", fmt_duration(Some(a))))
                         .unwrap_or_else(|| "[ DOWN ]".into()),
@@ -344,7 +349,7 @@ pub fn update(
             y += 60.6;
         }
     }
-    detail.rect(0., y + 5.5, 714., 1., GRID);
+    detail.rect(0., y + 5.5, DETAIL_WIDTH, 1., GRID);
     y += 12.;
     detail.caption(0., y, 300., "LAST 1H");
     if loading {
@@ -365,9 +370,9 @@ pub fn update(
         if (i == 2 && sensors.is_empty() && gpus.is_empty()) || (i == 3 && gpus.is_empty()) {
             continue;
         }
-        detail.caption(0., y, 714., *caption);
+        detail.caption(0., y, DETAIL_WIDTH, *caption);
         y += 18.9;
-        detail.append_at(&cache.render(&charts[i], 714, 132), 0., y);
+        detail.append_at(&cache.render(&charts[i], NODE_CHART.0, NODE_CHART.1), 0., y);
         y += 142.;
     }
     window.set_detail_height(y);

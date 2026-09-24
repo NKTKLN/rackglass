@@ -1,4 +1,4 @@
-use super::{AppWindow, scene::*};
+use super::{AppWindow, layout::*, scene::*};
 use crate::{fmt::*, store::StoreState};
 use chrono::Local;
 
@@ -379,18 +379,18 @@ pub fn update(window: &AppWindow, state: &StoreState) {
         window.set_dash_memory(m)
     });
     let mut headers = Scene::default();
-    for (title, x, width) in header_boxes(996.) {
+    for (title, x, width) in header_boxes(TABLE_WIDTH) {
         let t = headers.text(x, 2.55, width, title, 13., DIM, 400);
         t.align = 2;
         t.tracking = 1.;
     }
-    headers.rect(0., 22., 996., 1., GRID);
+    headers.rect(0., 22., TABLE_WIDTH, 1., GRID);
     sync_ink(window.get_dash_headers(), headers.0, |m| {
         window.set_dash_headers(m)
     });
     let mut rows = Scene::default();
-    let extent = (261. / guests.len().max(1) as f32).max(44.);
-    let columns = column_boxes(996.);
+    let extent = (TABLE_VIEWPORT / guests.len().max(1) as f32).max(44.);
+    let columns = column_boxes(TABLE_WIDTH);
     for (i, node) in guests.iter().enumerate() {
         let y = i as f32 * extent + (extent - 20.8) / 2.;
         let texts = [
@@ -473,14 +473,14 @@ pub fn update(window: &AppWindow, state: &StoreState) {
             t.align = COLUMNS[j].align;
         }
         if i + 1 < guests.len() {
-            rows.rect(0., (i + 1) as f32 * extent - 1., 996., 1., GRID);
+            rows.rect(0., (i + 1) as f32 * extent - 1., TABLE_WIDTH, 1., GRID);
         }
     }
     if guests.is_empty() {
-        rows.text(0., 120., 996., "NO GUEST TARGETS", 14., DIM, 400)
+        rows.text(0., 120., TABLE_WIDTH, "NO GUEST TARGETS", 14., DIM, 400)
             .align = 2;
     }
-    window.set_rows_height((guests.len() as f32 * extent).max(261.));
+    window.set_rows_height((guests.len() as f32 * extent).max(TABLE_VIEWPORT));
     sync_ink(window.get_dash_rows(), rows.0, |m| window.set_dash_rows(m));
 }
 pub fn status(window: &AppWindow, state: &StoreState, clock: chrono::DateTime<Local>) {

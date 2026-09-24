@@ -1,4 +1,4 @@
-use super::{AppWindow, scene::*};
+use super::{AppWindow, layout::*, scene::*};
 use crate::{
     capture::{CaptureSnapshot, CaptureState, letterbox},
     fmt::{fmt_bytes, fmt_duration},
@@ -32,9 +32,9 @@ pub fn update(window: &AppWindow, capture: &CaptureSnapshot) {
     }
     if let Some(frame) = &capture.frame {
         let viewport = if window.get_video_full() {
-            (1024., 600.)
+            CAPTURE_FULLSCREEN
         } else {
-            (1004., 452.)
+            CAPTURE_VIEWPORT
         };
         let (_, _, width, _) = letterbox((frame.width, frame.height), viewport);
         stats.push(format!("fit {:.0}%", width / frame.width as f32 * 100.));

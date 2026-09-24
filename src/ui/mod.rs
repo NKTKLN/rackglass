@@ -4,6 +4,7 @@ pub mod capture_view;
 pub mod chart;
 pub mod dashboard;
 pub mod history;
+pub mod layout;
 pub mod nodes;
 pub mod runtime;
 pub mod scene;

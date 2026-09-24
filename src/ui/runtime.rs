@@ -5,6 +5,7 @@ use super::{
     chart::{Chart, ChartCache},
     dashboard,
     history::{self, Colors, RequestGuard, Ticket},
+    layout::*,
     nodes,
     scene::{model, sync_ink},
 };
@@ -421,13 +422,21 @@ impl Runtime {
             return;
         };
         let (offset, content, viewport) = match which {
-            0 => (window.get_table_offset(), window.get_rows_height(), 261.),
+            0 => (
+                window.get_table_offset(),
+                window.get_rows_height(),
+                TABLE_VIEWPORT,
+            ),
             1 => (
                 window.get_targets_offset(),
                 window.get_targets_height(),
-                486.,
+                TARGETS_VIEWPORT,
             ),
-            _ => (window.get_detail_offset(), window.get_detail_height(), 484.),
+            _ => (
+                window.get_detail_offset(),
+                window.get_detail_height(),
+                DETAIL_VIEWPORT,
+            ),
         };
         let minimum = (viewport - content).min(0.);
         let now = Instant::now();
@@ -522,7 +531,9 @@ pub fn empty_node_charts(up: bool) -> [Chart; 4] {
     history::node_charts(&vec![vec![]; 5], Utc::now(), up)
 }
 pub fn present_graphs(window: &AppWindow, charts: &[Chart; 4], cache: &mut ChartCache) {
-    let [util, temp, memory, speed] = charts.each_ref().map(|c| cache.render(c, 489, 211));
+    let [util, temp, memory, speed] = charts
+        .each_ref()
+        .map(|c| cache.render(c, GRAPH_CHART.0, GRAPH_CHART.1));
     sync_ink(window.get_graph_util(), util, |m| window.set_graph_util(m));
     sync_ink(window.get_graph_temp(), temp, |m| window.set_graph_temp(m));
     sync_ink(window.get_graph_memory(), memory, |m| {
