@@ -1,85 +1,79 @@
 # 🍓 Running on a Raspberry Pi
 
-Notes from putting Rackglass on a Raspberry Pi 3B driving the 7" panel. Most of
-this is about two things that are not obvious until you hit them: Flutter will
-not cross-build for arm64, and a Pi 3B cannot give Flutter the OpenGL it wants.
+Notes for putting Rackglass on a Raspberry Pi 3B driving the 7" panel. The app
+draws straight to the display through KMS with Slint's software renderer: no
+X11, no Wayland compositor, no OpenGL at all.
 
-Everything below was measured on the hardware, not inferred.
+> [!IMPORTANT]
+> The Rust build has **not been run on the Pi yet**. The build below is
+> verified (it produces an aarch64 binary on an x64 host), but installing,
+> seat access, the systemd unit and anything about frame rate on the Pi are
+> untested. The Flutter version this replaced was measured on the hardware;
+> this one still has to be.
 
 ## The short version
 
 | | |
 | --- | --- |
-| Build | Not on the Pi, and not cross-compiled — inside an emulated arm64 container |
-| Display | X11, **not** Wayland |
-| Rendering | `LIBGL_ALWAYS_SOFTWARE=1` — llvmpipe, on the CPU |
-| Why | VideoCore IV tops out at OpenGL ES 2.0; Flutter needs 3.0 |
+| Build | Cross-compiled on an x64 host in podman, no emulation |
+| Display | KMS/DRM directly — no X11, no Wayland |
+| Rendering | Slint software renderer, repainting only what changed |
+| Input and display access | `seatd`, with the user in `video` |
 
-A Pi 4 or 5 has V3D with GLES 3.1 and needs none of the software-rendering
-workaround. The bundle built here runs on those unchanged.
+A Pi 4 or 5 runs the same binary; nothing here is specific to the 3B.
 
 ## Building
 
-`flutter build linux --target-platform=linux-arm64` exists, and so does
-`--target-sysroot`, but on an x64 host the tool answers:
-
-```
-Cross-build from Linux x64 host to Linux arm64 target is not currently supported.
-```
-
-There is also no arm64 Linux SDK archive — the releases manifest lists x64
-only. What *does* exist is the arm64 engine: `dart-sdk-linux-arm64.zip` and
-`linux-arm64-release/linux-arm64-flutter-gtk.zip` are published like any other
-artifact. So the tool runs on an arm64 host if you clone it from git, and the
-way to get an arm64 host on an x64 desktop is emulation:
-
 ```sh
-tools/arm64/build.sh config.pi.env
+tools/arm64/build.sh
 ```
 
-The first run builds the image — Debian bookworm, GTK dev packages, a shallow
-Flutter clone — and takes the better part of an hour under qemu. Later runs
-reuse it and take minutes. Output lands in `build/arm64-out/rackglass-arm64.tar.gz`,
-about 9 MB packed and 22 MB unpacked.
+This builds a Debian bookworm image carrying the aarch64 cross toolchain and
+the arm64 dev packages of every native library the `kms` feature links —
+libdrm, libgbm, libinput, libseat, libudev, libxkbcommon, fontconfig — through
+Debian multiarch, and compiles with
+`--target aarch64-unknown-linux-gnu --no-default-features --features kms`.
+Bookworm on purpose: it is what Raspberry Pi OS is based on, and its glibc
+(2.36) is the one the binary is linked against.
 
-Two things bite inside the container, both handled in `build.sh`:
+The crate registry and the cargo target directory live in named podman
+volumes, so after the first run a rebuild is incremental. Output lands in
+`build/arm64-out/rackglass-arm64.tar.gz`: the binary, `config.env.example` and
+`rackglass.service`.
 
-* Flutter unpacks artifacts with `tar` as root, which restores ownership from
-  the archive. Those uids are unmapped in podman's user namespace, the `chown`
-  fails and takes the whole extraction with it. `TAR_OPTIONS=--no-same-owner`
-  fixes every tar Flutter runs.
-* `bash -lc` sources `/etc/profile`, which resets `PATH` and loses the one the
-  image set — `flutter: command not found`. Use `bash -c`.
+Nothing about the deployment is baked in any more — configuration is read at
+runtime — so one build serves every panel.
 
 Verify what came out before copying it anywhere:
 
 ```sh
 tar -xzf build/arm64-out/rackglass-arm64.tar.gz -C /tmp
-file /tmp/bundle/rackglass          # ELF 64-bit … ARM aarch64
+file /tmp/rackglass/rackglass
 ```
-
-The binary needs glibc 2.34; Raspberry Pi OS bookworm has 2.36.
 
 ## Installing on the Pi
 
 ```sh
-sudo mkdir -p /opt/rackglass
-sudo tar -xzf rackglass-arm64.tar.gz -C /opt/rackglass
-
-sudo apt install -y xserver-xorg xinit x11-xserver-utils \
-                    libgtk-3-0 libgl1-mesa-dri ffmpeg
+sudo tar -xzf rackglass-arm64.tar.gz -C /opt
+sudo apt install -y libinput10 libgbm1 libdrm2 libudev1 libseat1 \
+                    libxkbcommon0 libfontconfig1 ffmpeg seatd
 sudo usermod -aG video "$USER"        # takes effect on next login
+sudo systemctl enable --now seatd
 ```
 
-`libgl1-mesa-dri` is not optional here: llvmpipe lives in it, and llvmpipe is
-what draws the whole app. The `video` group is what makes `/dev/video0`
-openable — without it capture fails on permissions and reports it as a device
-error.
+The binary opens the display and the input devices through libseat. A service
+has no login session, so logind will not hand them out; `seatd` does, to
+members of the group it runs with. The `video` group is also what makes
+`/dev/video0` openable — without it capture fails on permissions and reports it
+as a device error.
 
-Starting X from a service or over SSH needs:
+Configuration goes in `/etc/rackglass/config.env`, which the app reads at
+startup:
 
 ```sh
-printf 'allowed_users=anybody\nneeds_root_rights=yes\n' | sudo tee /etc/X11/Xwrapper.config
+sudo mkdir -p /etc/rackglass
+sudo cp /opt/rackglass/config.env.example /etc/rackglass/config.env
+sudoedit /etc/rackglass/config.env
 ```
 
 ### The capture node
@@ -92,63 +86,39 @@ and `bcm2835-isp` at 13–16, 20–23 — so a USB stick still lands on `video0`
 v4l2-ctl --list-devices
 ```
 
-and set `CAPTURE_DEVICE` in the build config to whichever node the stick got.
-It is baked in at build time, so getting it wrong means another build.
+and set `CAPTURE_DEVICE` in `/etc/rackglass/config.env` to whichever node the
+stick got. It is read at startup, so a wrong guess costs a restart rather than
+a rebuild.
 
 ## Running it
 
+By hand, from a text console on the panel (not over SSH into a desktop
+session — the display has to be free):
+
 ```sh
-LIBGL_ALWAYS_SOFTWARE=1 RACKGLASS_FULLSCREEN=1 \
-  xinit /bin/sh -c '
-    xset s off
-    xset -dpms
-    xset s noblank
-    exec /opt/rackglass/bundle/rackglass
-  ' -- :0 vt1 -nolisten tcp -nocursor
+RACKGLASS_FULLSCREEN=1 /opt/rackglass/rackglass
 ```
-
-`-nocursor` is an X server option, so it goes after the `--`. It removes the
-pointer entirely, which is what a touch panel wants; `unclutter` only hides it
-until the next movement.
-
-The three `xset` calls stop the screen blanking. A dashboard that turns itself
-off after ten minutes is not a dashboard, and nothing here ever touches the
-keyboard to wake it. Note the absolute path to `sh`: `xinit` only treats its
-first argument as the client program if it begins with a slash or a dot, and
-otherwise hands it to `xterm`.
 
 As a service, so the panel comes up on power and can be driven over SSH:
 
-```ini
-[Unit]
-Description=Rackglass panel
-After=systemd-user-sessions.service network-online.target
-
-[Service]
-User=nktkln
-Environment=LIBGL_ALWAYS_SOFTWARE=1
-Environment=RACKGLASS_FULLSCREEN=1
-ExecStart=/usr/bin/xinit /bin/sh -c 'xset s off; xset -dpms; xset s noblank; exec /opt/rackglass/bundle/rackglass' -- :0 vt1 -nolisten tcp -nocursor
-Restart=always
-RestartSec=3
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
 ```sh
+sudo cp /opt/rackglass/rackglass.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now rackglass
 journalctl -u rackglass -f
 ```
 
-`Restart=always` earns its place: the GL path is driver-sensitive and has been
-seen to crash inside Mesa on entirely different hardware.
+The unit runs as `nktkln`; change `User=` if the panel belongs to someone else.
+Raspberry Pi OS Lite boots to a console and runs no display server, so nothing
+else competes for the display. On a desktop image, disable the display manager
+first.
 
-## Why not Wayland, and why software rendering
+If the panel blanks after a few minutes, it is the kernel console blanking
+underneath; add `consoleblank=0` to `/boot/firmware/cmdline.txt`.
 
-The blocker is one function. With a GLES context Flutter reports:
+## Why not Flutter
+
+The Flutter build could not use the Pi 3B's GPU. With a GLES context Flutter
+reported:
 
 ```
 No provider of glBlitFramebuffer found.  Requires one of:
@@ -167,30 +137,17 @@ OpenGL ES profile version: OpenGL ES 2.0
 shading language version: OpenGL ES GLSL ES 1.0.16
 ```
 
-VideoCore IV offers GLES 2.0 and desktop GL 2.1, and none of those extensions.
-That is a property of the chip, so no display server changes it — GLX fails the
-same way EGL does. Which leaves llvmpipe, and llvmpipe is why X11:
-`LIBGL_ALWAYS_SOFTWARE=1` is a GLX variable. Under Wayland the app selects a
-device through EGL and Mesa refuses:
+VideoCore IV offers GLES 2.0 and desktop GL 2.1, and none of those extensions —
+a property of the chip, so no display server changes it. The Flutter build
+therefore ran under X11 with `LIBGL_ALWAYS_SOFTWARE=1`, rasterising the whole
+interface through llvmpipe on a 1.2 GHz quad Cortex-A53, with GTK and X in the
+path as well. That is the lag this port exists to remove: Slint's software
+renderer skips the GL emulation layer entirely and repaints only the regions
+that changed, and the three data screens change once per poll.
 
-```
-libEGL warning: Not allowed to force software rendering when API explicitly
-selects a hardware device.
-```
+## What is still expensive
 
-`cage` itself works fine — it only needs GLES 2.0 — and running it over SSH is
-possible with `seatd` (`seatd -g video`, plus membership of `video`), because a
-network session holds no seat and logind will not hand out DRM. None of that is
-needed once you settle on X11.
-
-## What software rendering costs
-
-The whole interface is drawn by a 1.2 GHz quad Cortex-A53. The three data
-screens are text, rules and block-character bars refreshed every five seconds,
-which is undemanding. CAPTURE is the open question: the card emits 148 KB per
-frame at 1024x600, and the app decodes every one of them on the CPU on top of
-drawing the scene.
-
-Watch `fps` and `dropped` on the line beside `mode`. If frames are being
-dropped, lower `CAPTURE_FPS` in the build config and rebuild — with the image
-cached that is a couple of minutes.
+CAPTURE. The card emits 148 KB per frame at 1024x600, and the app decodes every
+one of them on the CPU on top of drawing the scene. Watch `fps` and `dropped`
+on the line beside `mode`; if frames are being dropped, lower `CAPTURE_FPS` in
+`/etc/rackglass/config.env` and restart.
