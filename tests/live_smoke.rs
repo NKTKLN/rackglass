@@ -34,7 +34,7 @@ fn instant_and_fallback_expressions() {
         }
         println!("{key:?}: {} series", rows.len());
     }
-    for (key, query) in q::gpu_fallback_queries(&cfg) {
+    for (key, query) in q::gpu_fallback_queries() {
         let rows = c.instant(&query, None).unwrap();
         println!("fallback {key:?}: {} series", rows.len());
     }
@@ -60,7 +60,7 @@ fn coherent_poll_and_range_matrices() {
         q::RANGE_TEMP_CPU,
         q::RANGE_TEMP_GPU,
         q::RANGE_GPU_UTIL,
-        &q::range_net_rx(&cfg),
+        &q::net_rx(&cfg),
     ] {
         let rows = s
             .load_range(query, Duration::from_secs(3600), Some(end))

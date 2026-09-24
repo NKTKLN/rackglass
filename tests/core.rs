@@ -76,8 +76,7 @@ fn failed_polls_append_gaps_and_keep_last_snapshot() {
     poll(&store);
     assert_eq!(
         fake.calls(),
-        q::instant_poll_queries(&Config::default()).len()
-            + q::gpu_fallback_queries(&Config::default()).len()
+        q::instant_poll_queries(&Config::default()).len() + q::gpu_fallback_queries().len()
     );
     assert_eq!(store.state().gpu_temp_history.values(), [None]);
     let before = fake.calls();
@@ -270,13 +269,13 @@ fn gpu_seeds_from_each_metric_and_temperature_metadata_wins() {
         poll(&store);
         let s = store.state().snapshot.unwrap();
         assert_eq!(s.gpus.len(), 1, "{query}");
-        if *query != q::gpu_temp() {
+        if *query != q::fresh_gpu(q::GPU_TEMP) {
             assert_eq!(s.gpus[0].temp, None);
         }
     }
     let mut temp = gpu(30.0);
     temp["metric"]["modelName"] = json!("temperature metadata");
-    fake.set(q::gpu_temp(), vec![temp]);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), vec![temp]);
     poll(&store);
     assert_eq!(
         store.state().snapshot.unwrap().gpus[0].model,
@@ -296,7 +295,7 @@ fn gpu_primary_relatches_after_replacement_and_absence() {
     let mut replacement = gpu(55.0);
     replacement["metric"]["UUID"] = json!("replacement");
     replacement["metric"]["gpu"] = json!("2");
-    fake.set(q::gpu_temp(), vec![replacement.clone()]);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), vec![replacement.clone()]);
     poll(&store);
     assert_eq!(
         store.state().gpu_temp_history.values(),
@@ -304,16 +303,16 @@ fn gpu_primary_relatches_after_replacement_and_absence() {
     );
     let mut lower = gpu(66.0);
     lower["metric"]["gpu"] = json!("0");
-    fake.set(q::gpu_temp(), vec![lower, replacement]);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), vec![lower, replacement]);
     poll(&store);
     assert_eq!(
         store.state().gpu_temp_history.values().last(),
         Some(&Some(55.0))
     );
-    fake.set(q::gpu_temp(), vec![]);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), vec![]);
     poll(&store);
     assert_eq!(store.state().gpu_temp_history.values().last(), Some(&None));
-    fake.set(q::gpu_temp(), vec![gpu(22.0)]);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), vec![gpu(22.0)]);
     poll(&store);
     assert_eq!(
         store.state().gpu_temp_history.values().last(),
@@ -323,8 +322,8 @@ fn gpu_primary_relatches_after_replacement_and_absence() {
 #[test]
 fn fallback_only_for_down_targets_and_fresh_age_wins() {
     let fake = FakePrometheus::new(false);
-    fake.set(q::gpu_temp(), vec![gpu(88.0)]);
-    fake.set(q::gpu_temp_last(), vec![gpu(33.0)]);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), vec![gpu(88.0)]);
+    fake.set(q::last_gpu(q::GPU_TEMP), vec![gpu(33.0)]);
     fake.set(q::GPU_AGE_FRESH, vec![]);
     let store = store(&fake);
     poll(&store);
@@ -350,13 +349,17 @@ fn fallback_only_for_down_targets_and_fresh_age_wins() {
 #[test]
 fn optional_fallback_failure_keeps_nodes_current_and_retries() {
     let fake = FakePrometheus::new(false);
-    fake.reply(&q::gpu_temp_last(), 400, "{\"error\":\"scan failed\"}");
+    fake.reply(
+        &q::last_gpu(q::GPU_TEMP),
+        400,
+        "{\"error\":\"scan failed\"}",
+    );
     let store = store(&fake);
     poll(&store);
     assert!(store.state().healthy);
     assert_eq!(store.state().snapshot.unwrap().gpus[0].temp, None);
     let before = fake.calls();
-    fake.set(q::gpu_temp_last(), vec![gpu(31.0)]);
+    fake.set(q::last_gpu(q::GPU_TEMP), vec![gpu(31.0)]);
     poll(&store);
     assert_eq!(fake.calls() - before, 35);
     assert_eq!(store.state().snapshot.unwrap().gpus[0].temp, Some(31.0));
@@ -369,7 +372,7 @@ fn changed_down_targets_do_not_reuse_old_cache() {
     let mut targets = up(false);
     targets.push(sample(json!({"instance":"new-worker","job":"dcgm"}), 0.0));
     fake.set(q::UP, targets);
-    fake.reply(&q::gpu_temp_last(), 500, "bad");
+    fake.reply(&q::last_gpu(q::GPU_TEMP), 500, "bad");
     let before = fake.calls();
     poll(&store);
     assert_eq!(fake.calls() - before, 35);
@@ -389,7 +392,7 @@ fn numeric_gpu_sort_and_instance_first() {
         .into_iter()
         .map(|(i, g)| sample(json!({"instance":i,"gpu":g}), 10.0))
         .collect();
-    fake.set(q::gpu_temp(), rows);
+    fake.set(q::fresh_gpu(q::GPU_TEMP), rows);
     poll(&store);
     assert_eq!(
         store
@@ -519,7 +522,7 @@ fn query_sanitization_and_complete_batches() {
     assert_eq!(q::safe(dirty), "ab");
     assert_eq!(q::cpu_for(dirty), q::cpu_for("ab"));
     assert_eq!(q::mem_used_bytes_for(dirty), q::mem_used_bytes_for("ab"));
-    assert_eq!(q::mem_pct_for(dirty), q::mem_pct_for("ab"));
+    assert_eq!(q::cpu_for(dirty), q::cpu_for("ab"));
     assert_eq!(q::hwmon_temp_for(dirty), q::hwmon_temp_for("ab"));
     assert_eq!(
         q::gpu_temp_for(dirty),
@@ -529,11 +532,11 @@ fn query_sanitization_and_complete_batches() {
         q::gpu_util_for(dirty),
         "DCGM_FI_DEV_GPU_UTIL{instance=\"ab\"}"
     );
-    assert!(q::gpu_temp().ends_with("< 120)"));
-    assert!(q::gpu_temp_last().contains("[7d]"));
+    assert!(q::fresh_gpu(q::GPU_TEMP).ends_with("< 120)"));
+    assert!(q::last_gpu(q::GPU_TEMP).contains("[7d]"));
     assert!(q::GPU_AGE_DEEP.contains("[7d:5m]"));
     assert_eq!(q::instant_poll_queries(&Config::default()).len(), 26);
-    assert_eq!(q::gpu_fallback_queries(&Config::default()).len(), 9);
+    assert_eq!(q::gpu_fallback_queries().len(), 9);
     let c = Config {
         net_device_exclude: "a\\.b\"\n".into(),
         ..Default::default()
@@ -608,7 +611,7 @@ fn expired_fallback_refreshes_in_background_and_keeps_cache_on_failure() {
     }
     assert_eq!(s.state().snapshot.unwrap().gpus[0].temp, Some(40.0));
     t.replies.lock().unwrap().insert(
-        q::gpu_temp_last(),
+        q::last_gpu(q::GPU_TEMP),
         fake_prometheus::Reply::vector(vec![gpu(29.0)]),
     );
     t.gate.0.lock().unwrap().0 = false;
@@ -627,7 +630,7 @@ fn expired_fallback_refreshes_in_background_and_keeps_cache_on_failure() {
     poll(&s);
     assert_eq!(t.calls.load(Ordering::SeqCst) - calls, 26);
     t.replies.lock().unwrap().insert(
-        q::gpu_temp_last(),
+        q::last_gpu(q::GPU_TEMP),
         fake_prometheus::Reply {
             status: 500,
             body: "bad".into(),

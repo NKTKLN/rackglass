@@ -55,20 +55,31 @@ pub const ALL_TEMPS: &str = "(node_hwmon_temp_celsius * on(instance,chip,sensor)
 pub const GPU_AGE_FRESH: &str = "time() - timestamp(DCGM_FI_DEV_GPU_TEMP)";
 /// An exporter can have been down for hours or days; search seven days back.
 pub const GPU_AGE_DEEP: &str = "time() - max_over_time(timestamp(DCGM_FI_DEV_GPU_TEMP)[7d:5m])";
-pub const RANGE_CPU: &str =
-    "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)";
+pub const RANGE_CPU: &str = CPU_BUSY;
 pub const RANGE_MEM_PCT: &str =
     "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100";
-pub const RANGE_TEMP_CPU: &str =
-    "node_hwmon_temp_celsius * on(instance,chip,sensor) group_left(label) node_hwmon_sensor_label";
-pub const RANGE_TEMP_GPU: &str = "DCGM_FI_DEV_GPU_TEMP";
+pub const RANGE_TEMP_CPU: &str = CPU_TEMP;
+pub const RANGE_TEMP_GPU: &str = GPU_TEMP;
 pub const RANGE_GPU_UTIL: &str = "DCGM_FI_DEV_GPU_UTIL";
 /// End-to-end throughput per path, not NIC traffic. The exporter runs tens of
 /// minutes apart, so hold each measurement until the next one arrives.
 pub const RANGE_SPEEDTEST_DOWN: &str = "last_over_time(speedtest_download_bits_per_second[1h])";
 /// Both directions are measured in one run and honestly share one axis.
 pub const RANGE_SPEEDTEST_UP: &str = "last_over_time(speedtest_upload_bits_per_second[1h])";
-pub const RANGE_SPEEDTEST_LATENCY: &str = "last_over_time(speedtest_latency_seconds[1h])";
+
+pub const GPU_TEMP: &str = "DCGM_FI_DEV_GPU_TEMP";
+/// Every DCGM field on the panel. Each is queried live while its exporter is
+/// up, and from seven days of history only while it is down.
+pub const GPU_FIELDS: [(InstantQuery, &str); 8] = [
+    (InstantQuery::GpuTemp, GPU_TEMP),
+    (InstantQuery::GpuUtil, "DCGM_FI_DEV_GPU_UTIL"),
+    (InstantQuery::GpuFbUsed, "DCGM_FI_DEV_FB_USED"),
+    (InstantQuery::GpuFbFree, "DCGM_FI_DEV_FB_FREE"),
+    (InstantQuery::GpuPower, "DCGM_FI_DEV_POWER_USAGE"),
+    (InstantQuery::GpuSmClock, "DCGM_FI_DEV_SM_CLOCK"),
+    (InstantQuery::GpuMemClock, "DCGM_FI_DEV_MEM_CLOCK"),
+    (InstantQuery::GpuMemTemp, "DCGM_FI_DEV_MEMORY_TEMP"),
+];
 
 /// Fresh selectors reject lookback-window ghosts; history is queried separately.
 pub fn fresh_gpu(metric: &str) -> String {
@@ -96,60 +107,9 @@ pub fn net_tx(cfg: &Config) -> String {
         quote_regex(&cfg.net_device_exclude)
     )
 }
-pub fn range_net_rx(cfg: &Config) -> String {
-    net_rx(cfg)
-}
-pub fn gpu_temp() -> String {
-    fresh_gpu("DCGM_FI_DEV_GPU_TEMP")
-}
-pub fn gpu_temp_last() -> String {
-    last_gpu("DCGM_FI_DEV_GPU_TEMP")
-}
-pub fn gpu_mem_temp() -> String {
-    fresh_gpu("DCGM_FI_DEV_MEMORY_TEMP")
-}
-pub fn gpu_mem_temp_last() -> String {
-    last_gpu("DCGM_FI_DEV_MEMORY_TEMP")
-}
-pub fn gpu_util() -> String {
-    fresh_gpu("DCGM_FI_DEV_GPU_UTIL")
-}
-pub fn gpu_util_last() -> String {
-    last_gpu("DCGM_FI_DEV_GPU_UTIL")
-}
-pub fn gpu_fb_used() -> String {
-    fresh_gpu("DCGM_FI_DEV_FB_USED")
-}
-pub fn gpu_fb_used_last() -> String {
-    last_gpu("DCGM_FI_DEV_FB_USED")
-}
-pub fn gpu_fb_free() -> String {
-    fresh_gpu("DCGM_FI_DEV_FB_FREE")
-}
-pub fn gpu_fb_free_last() -> String {
-    last_gpu("DCGM_FI_DEV_FB_FREE")
-}
-pub fn gpu_power() -> String {
-    fresh_gpu("DCGM_FI_DEV_POWER_USAGE")
-}
-pub fn gpu_power_last() -> String {
-    last_gpu("DCGM_FI_DEV_POWER_USAGE")
-}
-pub fn gpu_sm_clock() -> String {
-    fresh_gpu("DCGM_FI_DEV_SM_CLOCK")
-}
-pub fn gpu_sm_clock_last() -> String {
-    last_gpu("DCGM_FI_DEV_SM_CLOCK")
-}
-pub fn gpu_mem_clock() -> String {
-    fresh_gpu("DCGM_FI_DEV_MEM_CLOCK")
-}
-pub fn gpu_mem_clock_last() -> String {
-    last_gpu("DCGM_FI_DEV_MEM_CLOCK")
-}
 /// Production and live smoke tests share this list so neither drifts behind.
 pub fn instant_poll_queries(cfg: &Config) -> Vec<(InstantQuery, String)> {
-    vec![
+    let mut queries: Vec<(InstantQuery, String)> = vec![
         (InstantQuery::Up, UP.into()),
         (InstantQuery::CpuBusy, CPU_BUSY.into()),
         (InstantQuery::Cores, CORES.into()),
@@ -167,31 +127,16 @@ pub fn instant_poll_queries(cfg: &Config) -> Vec<(InstantQuery, String)> {
         (InstantQuery::NetTx, net_tx(cfg)),
         (InstantQuery::AllTemps, ALL_TEMPS.into()),
         (InstantQuery::CpuIoWait, CPU_IO_WAIT.into()),
-        (InstantQuery::GpuTemp, gpu_temp()),
-        (InstantQuery::GpuUtil, gpu_util()),
-        (InstantQuery::GpuFbUsed, gpu_fb_used()),
-        (InstantQuery::GpuFbFree, gpu_fb_free()),
-        (InstantQuery::GpuPower, gpu_power()),
-        (InstantQuery::GpuSmClock, gpu_sm_clock()),
-        (InstantQuery::GpuMemClock, gpu_mem_clock()),
-        (InstantQuery::GpuMemTemp, gpu_mem_temp()),
-        (InstantQuery::GpuAgeFresh, GPU_AGE_FRESH.into()),
-    ]
+    ];
+    queries.extend(GPU_FIELDS.iter().map(|(q, m)| (*q, fresh_gpu(m))));
+    queries.push((InstantQuery::GpuAgeFresh, GPU_AGE_FRESH.into()));
+    queries
 }
 /// Expensive diagnostics, only for dcgm targets whose up is currently zero.
-pub fn gpu_fallback_queries(cfg: &Config) -> Vec<(InstantQuery, String)> {
-    let _ = cfg;
-    vec![
-        (InstantQuery::GpuTemp, gpu_temp_last()),
-        (InstantQuery::GpuUtil, gpu_util_last()),
-        (InstantQuery::GpuFbUsed, gpu_fb_used_last()),
-        (InstantQuery::GpuFbFree, gpu_fb_free_last()),
-        (InstantQuery::GpuPower, gpu_power_last()),
-        (InstantQuery::GpuSmClock, gpu_sm_clock_last()),
-        (InstantQuery::GpuMemClock, gpu_mem_clock_last()),
-        (InstantQuery::GpuMemTemp, gpu_mem_temp_last()),
-        (InstantQuery::GpuAgeDeep, GPU_AGE_DEEP.into()),
-    ]
+pub fn gpu_fallback_queries() -> Vec<(InstantQuery, String)> {
+    let mut queries: Vec<_> = GPU_FIELDS.iter().map(|(q, m)| (*q, last_gpu(m))).collect();
+    queries.push((InstantQuery::GpuAgeDeep, GPU_AGE_DEEP.into()));
+    queries
 }
 
 /// Strip quotes, backslashes and newlines from an instance label, as in Dart.
@@ -211,12 +156,6 @@ pub fn mem_used_bytes_for(instance: &str) -> String {
     let i = safe(instance);
     format!(
         "node_memory_MemTotal_bytes{{instance=\"{i}\"}} - node_memory_MemAvailable_bytes{{instance=\"{i}\"}}"
-    )
-}
-pub fn mem_pct_for(instance: &str) -> String {
-    let i = safe(instance);
-    format!(
-        "(1 - (node_memory_MemAvailable_bytes{{instance=\"{i}\"}} / node_memory_MemTotal_bytes{{instance=\"{i}\"}})) * 100"
     )
 }
 pub fn hwmon_temp_for(instance: &str) -> String {

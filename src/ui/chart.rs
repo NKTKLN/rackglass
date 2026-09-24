@@ -67,7 +67,6 @@ pub fn segments(points: &[PromPoint], window: u64) -> Vec<&[PromPoint]> {
 #[derive(Default)]
 pub struct ChartCache {
     entries: HashMap<u64, Vec<Ink>>,
-    pub renders: usize,
 }
 impl ChartCache {
     pub fn render(&mut self, chart: &Chart, width: u32, height: u32) -> Vec<Ink> {
@@ -98,7 +97,6 @@ impl ChartCache {
         if self.entries.len() >= 24 {
             self.entries.clear();
         }
-        self.renders += 1;
         self.entries.insert(key, items.clone());
         items
     }

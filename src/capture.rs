@@ -481,24 +481,6 @@ impl CaptureController {
             self.core.notify();
         }
     }
-    pub fn set_device(&self, device: CaptureDevice) {
-        let changed = {
-            let mut session = self.core.state.lock().unwrap();
-            session.pinned = true;
-            let changed = session
-                .snapshot
-                .device
-                .as_ref()
-                .is_none_or(|d| d.path != device.path);
-            session.snapshot.device = Some(device);
-            changed
-        };
-        if changed && self.state().running {
-            self.restart(true);
-        } else {
-            self.core.notify();
-        }
-    }
     fn restart(&self, running: bool) {
         let (generation, old) = {
             let mut session = self.core.state.lock().unwrap();

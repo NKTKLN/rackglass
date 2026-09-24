@@ -21,9 +21,6 @@ impl PromSample {
     pub fn instance(&self) -> Option<&str> {
         self.labels.get("instance").map(String::as_str)
     }
-    pub fn name(&self) -> Option<&str> {
-        self.labels.get("__name__").map(String::as_str)
-    }
 }
 #[derive(Clone, Debug)]
 pub struct PromPoint {

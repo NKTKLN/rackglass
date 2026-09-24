@@ -26,3 +26,4 @@ png = "0.18"
 
 [profile.release]
 lto = "thin"
+strip = true

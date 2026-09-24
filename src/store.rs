@@ -252,7 +252,7 @@ impl MetricsStore {
         self.refresh();
         let weak = Arc::downgrade(&self.0);
         let wake = self.0.wake.clone();
-        let interval = self.0.cfg.poll_interval().max(Duration::from_millis(1));
+        let interval = self.0.cfg.poll_interval();
         thread::spawn(move || {
             loop {
                 let (stop, _) = wake
@@ -354,7 +354,7 @@ impl MetricsStore {
         }
     }
     fn refresh_fallback(&self, down: BTreeSet<String>) -> Batch {
-        let result = self.batch(queries::gpu_fallback_queries(&self.0.cfg));
+        let result = self.batch(queries::gpu_fallback_queries());
         let mut f = self.0.fallback.lock().unwrap();
         f.in_flight = false;
         match result {

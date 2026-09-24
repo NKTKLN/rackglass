@@ -10,8 +10,6 @@ pub const RANGE_REFRESH: Duration = Duration::from_secs(60);
 /// Seven-day TSDB scans need not run on every five-second node poll.
 pub const GPU_FALLBACK_REFRESH: Duration = Duration::from_secs(60);
 pub const GPU_STALE_AFTER: Duration = Duration::from_secs(120);
-pub const DESIGN_WIDTH: f64 = 1024.0;
-pub const DESIGN_HEIGHT: f64 = 600.0;
 pub const CAPTURE_RETRY: Duration = Duration::from_secs(2);
 /// A desynced JPEG stream must not grow without bound.
 pub const CAPTURE_BUFFER_LIMIT: usize = 8 << 20;
@@ -123,8 +121,9 @@ impl Config {
         number!("CAPTURE_FPS", capture_fps);
         c
     }
+    /// Never zero: POLL_SECONDS=0 would otherwise poll back to back.
     pub fn poll_interval(&self) -> Duration {
-        Duration::from_secs(self.poll_seconds)
+        Duration::from_secs(self.poll_seconds.max(1))
     }
     /// Three missed polls, whatever the interval is. A fixed fifteen seconds
     /// silently becomes one missed poll when somebody slows polling down.

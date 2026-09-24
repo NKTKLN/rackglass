@@ -224,7 +224,7 @@ fn cluster(gpu_up: bool) -> HashMap<String, Reply> {
     let mut m = HashMap::new();
     for (_, q) in q::instant_poll_queries(&cfg)
         .into_iter()
-        .chain(q::gpu_fallback_queries(&cfg))
+        .chain(q::gpu_fallback_queries())
     {
         m.insert(q, Reply::vector(vec![]));
     }
