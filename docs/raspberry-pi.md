@@ -37,7 +37,10 @@ Bookworm on purpose: it is what Raspberry Pi OS is based on, and its glibc
 (2.36) is the one the binary is linked against.
 
 The crate registry and the cargo target directory live in named podman
-volumes, so after the first run a rebuild is incremental. Output lands in
+volumes, so after the first run a rebuild is incremental. From a cold target
+directory the whole run took 5m39s on the desktop this was written on, 3m42s
+of it compiling; an image that ends up arm64 by mistake runs the same build
+under qemu and took 131 minutes, which is why `build.sh` pins `--arch amd64`. Output lands in
 `build/arm64-out/rackglass-arm64.tar.gz`: the binary, `config.env.example` and
 `rackglass.service`.
 
@@ -51,12 +54,16 @@ tar -xzf build/arm64-out/rackglass-arm64.tar.gz -C /tmp
 file /tmp/rackglass/rackglass
 ```
 
+It should say `ARM aarch64`. The shared libraries it needs, read off the binary
+with `objdump -p`, are libinput, libudev, libseat, libxkbcommon, fontconfig and
+glibc 2.35 or newer — nothing from Mesa, since nothing touches the GPU.
+
 ## Installing on the Pi
 
 ```sh
 sudo tar -xzf rackglass-arm64.tar.gz -C /opt
-sudo apt install -y libinput10 libgbm1 libdrm2 libudev1 libseat1 \
-                    libxkbcommon0 libfontconfig1 ffmpeg seatd
+sudo apt install -y libinput10 libudev1 libseat1 libxkbcommon0 \
+                    libfontconfig1 ffmpeg seatd
 sudo usermod -aG video "$USER"        # takes effect on next login
 sudo systemctl enable --now seatd
 ```
