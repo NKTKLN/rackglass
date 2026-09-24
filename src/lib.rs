@@ -7,5 +7,5 @@ pub mod store;
 pub use config::Config;
 pub use prom::client::PromClient;
 pub use store::MetricsStore;
-pub mod ui;
 pub mod capture;
+pub mod ui;

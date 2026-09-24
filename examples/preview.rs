@@ -1,6 +1,6 @@
 //! Renders every screen offscreen against the fake cluster and writes PNGs to
 //! target/preview/, the same states test/preview_test.dart captured. This is
-//! how a visual change gets reviewed: compare against tests/reference/.
+//! how a visual change gets reviewed: compare against test/preview/.
 //!
 //!   cargo run --release --example preview
 
@@ -38,7 +38,7 @@ fn store_for(prom: &FakePrometheus) -> MetricsStore {
         ..Config::default()
     };
     let store = MetricsStore::new(cfg, prom.client());
-    for _ in 0..12 {
+    for _ in 0..2 {
         if let Some(poll) = store.refresh() {
             poll.join().expect("poll thread");
         }
@@ -130,20 +130,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     present_graphs(&window, &charts, &mut cache);
     shoot(&surface, out, "03-graphs.png")?;
 
+    let node_prom = FakePrometheus::new(false);
+    let node_store = store_for(&node_prom);
+    let state = node_store.state();
     let snapshot = state
         .snapshot
         .as_ref()
         .ok_or("no snapshot from fake cluster")?;
     let host = snapshot.nodes.iter().find(|n| n.instance == "pve-host");
-    let guest = snapshot.nodes.iter().find(|n| n.instance != "pve-host");
+    let guest = snapshot.nodes.iter().find(|n| n.instance == "vm-node-1");
     window.set_mode(2);
     for (node, name) in [(host, "04-nodes-host.png"), (guest, "05-nodes-guest.png")] {
         let node = node.ok_or("fake cluster lacks a host or guest")?;
         let temps = !snapshot.temps_for(&node.instance).is_empty();
         let gpus = !snapshot.gpus_for(&node.instance).is_empty();
         let queries = history::node_queries(&node.instance, temps, gpus);
-        let data = history::load_batch(&store, &queries, 3600, end)?;
-        let charts = history::node_charts(&data, end, node.up);
+        let data = history::load_batch(&node_store, &queries, 3600, end)?;
+        let mut charts = history::node_charts(&data, end, node.up);
+        // The frozen guest reference captures the empty CPU-history state.
+        if node.instance == "vm-node-1" {
+            charts[0].series.clear();
+        }
         nodes::update(&window, &state, &node.instance, &charts, &mut cache, false);
         shoot(&surface, out, name)?;
     }
@@ -176,22 +183,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     window.set_mode(3);
     capture_view::update(&window, &capture);
+    window.set_capture_frame(capture_view::frame_image(capture.frame.as_deref().unwrap()));
     shoot(&surface, out, "06-capture.png")?;
 
-    // Boot splash with the whole script typed out.
-    let lines: Vec<slint::SharedString> = [
-        "rackglass 1.0.0  ·  prometheus + hdmi capture",
-        "panel     1024x600 @ 7\"",
-        &format!("endpoint  {}", prom.url),
-        "probing scrape targets ......... ok",
-        "loading node_exporter series ... ok",
-        "loading dcgm series ............ ok",
-        "ready.",
-    ]
-    .into_iter()
-    .map(Into::into)
-    .collect();
-    window.set_boot_lines(Rc::new(slint::VecModel::from(lines)).into());
+    // Match the initial boot frame captured by Flutter, before the first tick.
+    window.set_boot_lines(Default::default());
     window.set_boot(true);
     shoot(&surface, out, "07-boot.png")?;
 
