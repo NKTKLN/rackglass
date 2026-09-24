@@ -1,0 +1,116 @@
+import { TC } from "theme.slint";
+import { Ink, Scene, TermPanel, Mono, PickButton } from "components.slint";
+export component Graphs inherits Rectangle {
+    in property <[Ink]> utilisation;
+    in property <[Ink]> temperature;
+    in property <[Ink]> memory;
+    in property <[Ink]> speed;
+    in property <int> window-index: 1;
+    in property <string> step: "15s";
+    in property <string> status: "OK";
+    callback pick(int);
+    callback reload;
+    Mono {
+        width: 48px;
+        height: 30px;
+        text: "RANGE";
+        font-size: 13px;
+        letter-spacing: 1.2px;
+        color: TC.dim;
+    }
+    HorizontalLayout {
+        x: 53px;
+        y: 1px;
+        height: 28px;
+        spacing: 4px;
+        for label[i] in ["15m", "1h", "6h", "24h", "7d"]: PickButton {
+            label: label;
+            selected: i == root.window-index;
+            clicked => {
+                root.pick(i);
+            }
+        }
+    }
+    Mono {
+        x: 311px;
+        height: 30px;
+        text: "step " + root.step;
+        font-size: 13px;
+        color: TC.dim;
+    }
+    Mono {
+        x: 550px;
+        width: 377px;
+        height: 30px;
+        text: root.status;
+        horizontal-alignment: right;
+        font-size: 13px;
+        color: root.status == "OK" ? TC.dim : TC.amber;
+    }
+    PickButton {
+        x: 936px;
+        y: 1px;
+        label: "RELOAD";
+        clicked => {
+            root.reload();
+        }
+    }
+    TermPanel {
+        y: 36px;
+        width: 503px;
+        height: 235px;
+        title: "UTILISATION %";
+        Scene {
+            x: 6px;
+            y: 20px;
+            width: 489px;
+            height: 211px;
+            clip: true;
+            items: root.utilisation;
+        }
+    }
+    TermPanel {
+        x: 509px;
+        y: 36px;
+        width: 503px;
+        height: 235px;
+        title: "TEMPERATURE °C";
+        Scene {
+            x: 6px;
+            y: 20px;
+            width: 489px;
+            height: 211px;
+            clip: true;
+            items: root.temperature;
+        }
+    }
+    TermPanel {
+        y: 277px;
+        width: 503px;
+        height: 235px;
+        title: "MEMORY USED %";
+        Scene {
+            x: 6px;
+            y: 20px;
+            width: 489px;
+            height: 211px;
+            clip: true;
+            items: root.memory;
+        }
+    }
+    TermPanel {
+        x: 509px;
+        y: 277px;
+        width: 503px;
+        height: 235px;
+        title: "SPEEDTEST ↓↑ · MBIT/S";
+        Scene {
+            x: 6px;
+            y: 20px;
+            width: 489px;
+            height: 211px;
+            clip: true;
+            items: root.speed;
+        }
+    }
+}

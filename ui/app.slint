@@ -1,0 +1,289 @@
+import "../assets/fonts/JetBrainsMono-Regular.ttf";
+import "../assets/fonts/JetBrainsMono-Medium.ttf";
+import "../assets/fonts/JetBrainsMono-Bold.ttf";
+import { TC, TZ } from "theme.slint";
+import { Ink, Scene, Mono } from "components.slint";
+import { Dashboard } from "dashboard.slint";
+import { Graphs } from "graphs.slint";
+import { Nodes } from "nodes.slint";
+import { Capture } from "capture.slint";
+export { Ink, TC, TZ }
+export component AppWindow inherits Window {
+    title: "rackglass";
+    width: 1024px;
+    height: 600px;
+    background: TC.bg;
+    default-font-family: "JetBrains Mono";
+    in-out property <int> mode;
+    in-out property <bool> video-full;
+    in-out property <bool> boot: true;
+    in property <[string]> boot-lines;
+    in property <[Ink]> status;
+    in property <[Ink]> dash-cpu;
+    in property <[Ink]> dash-gpu;
+    in property <[Ink]> dash-memory;
+    in property <[Ink]> dash-headers;
+    in property <[Ink]> dash-rows;
+    in property <[string]> dash-titles;
+    in property <[string]> dash-tags;
+    in property <bool> gpu-stale;
+    in property <bool> host-down;
+    in property <string> dash-message: "CONNECTING…";
+    in property <string> stale-message;
+    in property <float> rows-height;
+    in-out property <length> table-offset;
+    in property <[Ink]> graph-util;
+    in property <[Ink]> graph-temp;
+    in property <[Ink]> graph-memory;
+    in property <[Ink]> graph-speed;
+    in property <int> range-index: 1;
+    in property <string> range-step: "15s";
+    in property <string> range-status: "OK";
+    in property <[Ink]> node-targets;
+    in property <[Ink]> node-detail;
+    in property <string> node-title;
+    in property <string> node-tag;
+    in property <color> node-tag-color;
+    in property <string> node-message: "NO DATA";
+    in property <float> targets-height;
+    in property <float> detail-height;
+    in-out property <length> targets-offset;
+    in-out property <length> detail-offset;
+    in property <bool> capture-running;
+    in property <image> capture-frame;
+    in property <bool> capture-show-frame;
+    in property <string> capture-title;
+    in property <string> capture-tag;
+    in property <color> capture-color;
+    in property <color> capture-accent;
+    in property <color> capture-message-color;
+    in property <string> capture-stats;
+    in property <string> capture-uptime;
+    in property <string> capture-message;
+    in property <string> capture-line1;
+    in property <string> capture-line2;
+    in property <bool> table-coast;
+    in property <bool> targets-coast;
+    in property <bool> detail-coast;
+    animate table-offset {
+        duration: root.table-coast ? 180ms : 0ms;
+        easing: ease-out;
+    }
+    animate targets-offset {
+        duration: root.targets-coast ? 180ms : 0ms;
+        easing: ease-out;
+    }
+    animate detail-offset {
+        duration: root.detail-coast ? 180ms : 0ms;
+        easing: ease-out;
+    }
+    callback select-mode(int);
+    callback select-range(int);
+    callback reload-range;
+    callback refresh;
+    callback capture-toggle;
+    callback capture-fullscreen(bool);
+    callback scroll(int, int, float);
+    callback quit;
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == "1" || event.text == Key.F1 {
+                root.select-mode(0);
+            }
+            else if event.text == "2" || event.text == Key.F2 {
+                root.select-mode(1);
+            }
+            else if event.text == "3" || event.text == Key.F3 {
+                root.select-mode(2);
+            }
+            else if event.text == "4" || event.text == Key.F4 {
+                root.select-mode(3);
+            }
+            else if event.text == Key.RightArrow || event.text == Key.Tab {
+                root.select-mode(mod(root.mode + 1, 4));
+            }
+            else if event.text == Key.LeftArrow {
+                root.select-mode(mod(root.mode + 3, 4));
+            }
+            else if event.text == "r" {
+                root.refresh();
+            }
+            else if event.text == Key.Escape {
+                root.capture-fullscreen(false);
+            }
+            else if event.text == "q" {
+                root.quit();
+            }
+            else {
+                return reject;
+            }
+            return accept;
+        }
+    }
+    // All content is authored on the panel's design canvas. Window zoom uses
+    // the same contain-fit as Flutter and never relays out the table columns.
+    Rectangle {
+        property <float> fit: min(root.width / 1024px, root.height / 600px);
+        width: 1024px;
+        height: 600px;
+        x: (root.width - 1024px) / 2;
+        y: (root.height - 600px) / 2;
+        transform-scale: self.fit;
+        Rectangle {
+            x: root.video-full ? 0px : 6px;
+            y: root.video-full ? 0px : 58px;
+            width: root.video-full ? 1024px : 1012px;
+            height: root.video-full ? 600px : 512px;
+            if root.mode == 0: Dashboard {
+                cpu: root.dash-cpu;
+                gpu: root.dash-gpu;
+                memory: root.dash-memory;
+                headers: root.dash-headers;
+                rows: root.dash-rows;
+                titles: root.dash-titles;
+                tags: root.dash-tags;
+                gpu-stale: root.gpu-stale;
+                host-down: root.host-down;
+                message: root.dash-message;
+                stale-message: root.stale-message;
+                rows-height: root.rows-height;
+                table-offset <=> root.table-offset;
+                scroll(k, y) => {
+                    root.scroll(0, k, y);
+                }
+            }
+            if root.mode == 1: Graphs {
+                utilisation: root.graph-util;
+                temperature: root.graph-temp;
+                memory: root.graph-memory;
+                speed: root.graph-speed;
+                window-index: root.range-index;
+                step: root.range-step;
+                status: root.range-status;
+                pick(i) => {
+                    root.select-range(i);
+                }
+                reload => {
+                    root.reload-range();
+                }
+            }
+            if root.mode == 2: Nodes {
+                targets: root.node-targets;
+                detail: root.node-detail;
+                title: root.node-title;
+                tag: root.node-tag;
+                tag-color: root.node-tag-color;
+                message: root.node-message;
+                targets-height: root.targets-height;
+                detail-height: root.detail-height;
+                targets-offset <=> root.targets-offset;
+                detail-offset <=> root.detail-offset;
+                scroll(which, k, y) => {
+                    root.scroll(which, k, y);
+                }
+            }
+            if root.mode == 3: Capture {
+                full: root.video-full;
+                running: root.capture-running;
+                frame: root.capture-frame;
+                show-frame: root.capture-show-frame;
+                title: root.capture-title;
+                tag: root.capture-tag;
+                state-color: root.capture-color;
+                accent: root.capture-accent;
+                message-color: root.capture-message-color;
+                stats: root.capture-stats;
+                uptime: root.capture-uptime;
+                message: root.capture-message;
+                message-line1: root.capture-line1;
+                message-line2: root.capture-line2;
+                toggle => {
+                    root.capture-toggle();
+                }
+                fullscreen(v) => {
+                    root.capture-fullscreen(v);
+                }
+            }
+        }
+        if !root.video-full: Rectangle {
+            for label[i] in ["DASH", "GRAPHS", "NODES", "CAPTURE"]: Rectangle {
+                x: 6px + i * 155px;
+                y: 6px;
+                width: 150px;
+                height: 40px;
+                border-width: 1px;
+                border-color: root.mode == i ? TC.bright : TC.border;
+                background: root.mode == i ? TC.bright : TC.bg;
+                Mono {
+                    text: label;
+                    font-size: 18px;
+                    font-weight: root.mode == i ? 700 : 400;
+                    letter-spacing: 1.2px;
+                    color: root.mode == i ? TC.bg : TC.mid;
+                    horizontal-alignment: center;
+                }
+                TouchArea {
+                    clicked => {
+                        root.select-mode(i);
+                    }
+                }
+            }
+            Scene {
+                y: 574px;
+                height: 26px;
+                items: root.status;
+            }
+        }
+        if root.boot: Rectangle {
+            background: TC.bg;
+            Mono {
+                y: 30px;
+                width: 650px;
+                height: 63px;
+                text: "RACKGLASS";
+                font-size: 48px;
+                font-weight: 700;
+                letter-spacing: 12px;
+                x: 36px;
+                color: TC.bright;
+            }
+            Rectangle {
+                x: 30px;
+                y: 101px;
+                width: 560px;
+                height: 1px;
+                background: TC.border;
+            }
+            for line[i] in root.boot-lines: Rectangle {
+                x: 30px;
+                y: 120px + i * 25px;
+                width: 964px;
+                height: 21px;
+                Mono {
+                    width: 10px;
+                    text: ">";
+                    color: TC.dim;
+                }
+                Mono {
+                    x: 18px;
+                    text: line;
+                    color: i == 6 ? TC.bright : TC.mid;
+                }
+            }
+            Mono {
+                x: 30px;
+                y: 553px;
+                height: 17px;
+                text: "tap to skip";
+                font-size: 13px;
+                color: TC.dim;
+            }
+            TouchArea {
+                clicked => {
+                    root.boot = false;
+                }
+            }
+        }
+    }
+}

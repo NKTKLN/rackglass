@@ -1,0 +1,121 @@
+import { TC } from "theme.slint";
+import { TermPanel, Mono, PickButton } from "components.slint";
+export component Capture inherits Rectangle {
+    in property <bool> full;
+    in property <bool> running;
+    in property <image> frame;
+    in property <bool> show-frame;
+    in property <string> title;
+    in property <string> tag;
+    in property <color> state-color;
+    in property <color> accent;
+    in property <color> message-color;
+    in property <string> stats;
+    in property <string> uptime;
+    in property <string> message;
+    in property <string> message-line1;
+    in property <string> message-line2;
+    callback toggle;
+    callback fullscreen(bool);
+    if !root.full: Rectangle {
+        PickButton {
+            y: 1px;
+            label: root.running ? "STOP" : "START";
+            selected: root.running;
+            clicked => {
+                root.toggle();
+            }
+        }
+        PickButton {
+            x: 67px;
+            y: 1px;
+            label: "FULLSCREEN";
+            clicked => {
+                root.fullscreen(true);
+            }
+        }
+        Mono {
+            x: 191px;
+            width: parent.width - 271px;
+            height: 30px;
+            text: root.stats;
+            font-size: 13px;
+            color: TC.dim;
+        }
+        Mono {
+            x: parent.width - 72px;
+            width: 72px;
+            height: 30px;
+            text: root.uptime;
+            font-size: 13px;
+            color: TC.dim;
+            horizontal-alignment: right;
+        }
+        TermPanel {
+            y: 36px;
+            height: parent.height - 36px;
+            title: root.title;
+            tag: root.tag;
+            tag-color: root.state-color;
+            accent: root.accent;
+            title-color: root.accent == TC.border ? TC.mid : root.accent;
+        }
+    }
+    Rectangle {
+        x: root.full ? 0px : 4px;
+        y: root.full ? 0px : 56px;
+        width: parent.width - (root.full ? 0px : 8px);
+        height: parent.height - (root.full ? 0px : 60px);
+        if root.show-frame: Image {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            source: root.frame;
+            image-fit: contain;
+        }
+        if root.message != "": Rectangle {
+            width: min(parent.width, max(title.preferred-width, max(line1.preferred-width, line2.preferred-width)) + 44px);
+            height: root.message-line2 == "" ? 94px : 114px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: #000000db;
+            border-width: 1px;
+            border-color: root.message-color;
+            title := Mono {
+                y: 16px;
+                height: 31px;
+                text: root.message;
+                font-size: 24px;
+                font-weight: 700;
+                letter-spacing: 3px;
+                color: root.message-color;
+                horizontal-alignment: center;
+            }
+            line1 := Mono {
+                y: 57px;
+                height: 19px;
+                text: root.message-line1;
+                font-size: 14px;
+                color: TC.dim;
+                horizontal-alignment: center;
+            }
+            line2 := Mono {
+                y: 77px;
+                height: 19px;
+                text: root.message-line2;
+                font-size: 14px;
+                color: TC.dim;
+                horizontal-alignment: center;
+            }
+        }
+    }
+    if root.full: PickButton {
+        x: parent.width - self.width - 6px;
+        y: 6px;
+        label: "EXIT FULL";
+        clicked => {
+            root.fullscreen(false);
+        }
+    }
+}

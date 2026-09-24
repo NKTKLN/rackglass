@@ -1,0 +1,105 @@
+import { TC } from "theme.slint";
+import { Ink, Scene, TermPanel, Mono, DragScroll } from "components.slint";
+export component Dashboard inherits Rectangle {
+    in property <[Ink]> cpu;
+    in property <[Ink]> gpu;
+    in property <[Ink]> memory;
+    in property <[Ink]> headers;
+    in property <[Ink]> rows;
+    in property <[string]> titles;
+    in property <[string]> tags;
+    in property <bool> gpu-stale;
+    in property <bool> host-down;
+    in property <string> message;
+    in property <string> stale-message;
+    in property <float> row-height;
+    in property <float> rows-height;
+    in-out property <length> table-offset;
+    callback scroll(int, float);
+    if root.message != "": Mono {
+        text: root.message;
+        font-size: 18px;
+        horizontal-alignment: center;
+        color: TC.dim;
+    }
+    if root.message == "": Rectangle {
+        opacity: root.stale-message == "" ? 1 : 0.42;
+        TermPanel {
+            x: 0px;
+            width: 322px;
+            height: 196px;
+            title: root.titles[0];
+            tag: root.tags[0];
+            tag-color: TC.red;
+            accent: root.host-down ? TC.red : TC.border;
+            Scene {
+                items: root.cpu;
+            }
+        }
+        TermPanel {
+            x: 328px;
+            width: 344px;
+            height: 196px;
+            title: root.titles[1];
+            tag: root.tags[1];
+            tag-color: TC.red;
+            accent: root.gpu-stale ? TC.amber : TC.border;
+            title-color: root.gpu-stale ? TC.amber : TC.mid;
+            Scene {
+                items: root.gpu;
+            }
+        }
+        TermPanel {
+            x: 678px;
+            width: 334px;
+            height: 196px;
+            title: "MEMORY";
+            Scene {
+                items: root.memory;
+            }
+        }
+        TermPanel {
+            y: 202px;
+            height: 310px;
+            title: root.titles[2];
+            tag: root.tags[2];
+            tag-color: TC.red;
+            Scene {
+                x: 8px;
+                y: 20px;
+                width: parent.width - 16px;
+                height: 23px;
+                items: root.headers;
+            }
+            DragScroll {
+                x: 8px;
+                y: 43px;
+                width: parent.width - 16px;
+                height: 261px;
+                content-height: root.rows-height * 1px;
+                offset <=> root.table-offset;
+                gesture(k, y) => {
+                    root.scroll(k, y);
+                }
+                Scene {
+                    items: root.rows;
+                }
+            }
+        }
+    }
+    if root.stale-message != "": Rectangle {
+        x: parent.width - notice.preferred-width - 32px;
+        y: 6px;
+        width: notice.preferred-width + 16px;
+        height: 25px;
+        background: TC.bg;
+        notice := Mono {
+            x: 8px;
+            text: root.stale-message;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: TC.amber;
+        }
+    }
+}

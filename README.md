@@ -1,9 +1,8 @@
 # 📟 Rackglass
 
-[![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
-[![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
-[![Linux](https://img.shields.io/badge/Linux-desktop-FCC624?logo=linux&logoColor=black)](https://docs.flutter.dev/platform-integration/linux/building)
-[![GTK](https://img.shields.io/badge/GTK-3-7FE719?logo=gtk&logoColor=black)](https://www.gtk.org/)
+[![Rust](https://img.shields.io/badge/Rust-2024-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Slint](https://img.shields.io/badge/Slint-1.18-2379F4)](https://slint.dev/)
+[![Linux](https://img.shields.io/badge/Linux-KMS-FCC624?logo=linux&logoColor=black)](https://docs.slint.dev/latest/docs/slint/guide/backends-and-renderers/backend_linuxkms/)
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Proxmox](https://img.shields.io/badge/Proxmox-VE-E57000?logo=proxmox&logoColor=white)](https://www.proxmox.com/)
 [![NVIDIA DCGM](https://img.shields.io/badge/NVIDIA-DCGM-76B900?logo=nvidia&logoColor=white)](https://github.com/NVIDIA/dcgm-exporter)
@@ -32,10 +31,11 @@ machine being monitored can be watched booting on the screen that monitors it.
 
 ## 📦 Dependencies
 
-* [Flutter](https://docs.flutter.dev/get-started/install/linux) with Linux
-  desktop support enabled
+* [Rust](https://www.rust-lang.org/tools/install), edition 2024 (1.85 or newer)
 * [ffmpeg](https://ffmpeg.org/) — spawned as a child process for V4L2 capture
-* Build toolchain: `clang`, `cmake`, `ninja`, `gtk3-devel`
+* `fontconfig` headers for any build; for the `kms` build (straight to the
+  display, no X or Wayland) also `libinput`, `libgbm`, `libdrm`, `libudev`,
+  `libseat` and `libxkbcommon`
 
 Runtime services it reads:
 
@@ -50,7 +50,13 @@ Runtime services it reads:
 On Fedora:
 
 ```sh
-sudo dnf install -y clang cmake ninja-build gtk3-devel ffmpeg
+sudo dnf install -y fontconfig-devel ffmpeg
+```
+
+and for the `kms` build:
+
+```sh
+sudo dnf install -y libinput-devel mesa-libgbm-devel libdrm-devel systemd-devel libseat-devel libxkbcommon-devel
 ```
 
 ## 🖥 Screens
@@ -90,37 +96,37 @@ because the app name and the endpoint told you nothing you could act on and the
 row they cost is worth more to the data. The endpoint lives in the diagnostics
 line at the bottom, next to the poll time.
 
-## 🔧 Build-time configuration
+## 🔧 Configuration
 
 There is no settings screen — a kiosk panel has nobody in front of it to fill
-one in. Configuration is a set of compile-time defines baked into the binary,
-and the usual way to supply them is an env file:
+one in. Configuration is read once at startup from a `KEY=VALUE` file and the
+environment:
 
 ```sh
 cp config.env.example config.env
 $EDITOR config.env
-
-flutter run   -d linux           --dart-define-from-file=config.env
-flutter build linux --release    --dart-define-from-file=config.env
 ```
 
-`config.env` is gitignored, so your endpoint and your topology stay out of the
-repository. Individual values can still be passed directly, and a
-`--dart-define` wins over the same key in the file:
+The file is the first one found of `$RACKGLASS_CONFIG`, `./config.env` and
+`/etc/rackglass/config.env`, and any key set in the environment wins over the
+file. `config.env` is gitignored, so your endpoint and your topology stay out of
+the repository. A one-off override needs no file at all:
 
 ```sh
-flutter run -d linux --dart-define=PROM_URL=http://10.0.0.5:9090
+PROM_URL=http://10.0.0.5:9090 cargo run
 ```
 
-| Define | Default | What it is |
+| Key | Default | What it is |
 | --- | --- | --- |
 | `PROM_URL` | `http://localhost:9090` | Prometheus base URL, no trailing slash |
 | `POLL_SECONDS` | `5` | Seconds between polls; staleness is three of these |
 | `NET_DEVICE_EXCLUDE` | `^(lo\|veth.*\|tap.*\|fwbr.*\|fwln.*\|fwpr.*\|vmbr.*\|docker.*\|br-.*\|virbr.*)$` | Interfaces kept out of network totals |
+| `HYPERVISOR` | `pve-host` | The node_exporter instance that is the host; every other target is a guest |
 | `CAPTURE_DEVICE` | `/dev/video0` | V4L2 node to capture from; empty to scan for one |
 | `CAPTURE_W` | `1024` | Capture width requested from the card |
 | `CAPTURE_H` | `600` | Capture height |
 | `CAPTURE_FPS` | `30` | Capture frame rate |
+| `FFMPEG` | `ffmpeg` | Binary used to read the capture device |
 
 The default endpoint points at localhost on purpose: an unconfigured build
 should fail to connect in a way you notice, rather than quietly querying
@@ -130,64 +136,78 @@ The interface exclusion matters on a Proxmox host: without it the same
 forwarded packet is counted on the physical NIC, the bridge and the tap device,
 and the host appears to be moving three times the traffic it is.
 
-Environment variables, read at launch rather than build:
+Two more environment variables control the window rather than the data:
 
 * `RACKGLASS_FULLSCREEN` — any value except `0`, `false`, `no` or `off` drops the
   titlebar and goes fullscreen
+* `SLINT_BACKEND` — overrides the backend the build picked, e.g.
+  `winit-software` or `linuxkms-software`
 
 ## 🚀 Running
 
-Development:
+Development, in a window on the desktop:
 
 ```sh
-flutter run -d linux
+cargo run
 ```
 
-On the panel:
+On the panel, drawing straight to the display through KMS with no X or Wayland
+underneath:
 
 ```sh
-flutter build linux --release
-RACKGLASS_FULLSCREEN=1 ./build/linux/x64/release/bundle/rackglass
+cargo build --release --no-default-features --features kms
+RACKGLASS_FULLSCREEN=1 ./target/release/rackglass
 ```
 
 Without `RACKGLASS_FULLSCREEN` you get a normal 1024x600 window, which is the
 exact panel size — what you see while developing is what lands on the device.
 
-On a Raspberry Pi, see [docs/raspberry-pi.md](docs/raspberry-pi.md): Flutter
-will not cross-build for arm64, and a Pi 3B cannot give it the OpenGL it wants,
-so both the build and the display need arranging.
+Everything is drawn by Slint's software renderer, which repaints only the
+regions that changed. That choice comes from the Raspberry Pi 3B this runs on:
+its GPU offers OpenGL ES 2.0 only, which Flutter, the previous implementation,
+could not use, so the whole interface ended up rasterised through llvmpipe on
+the CPU anyway. See [docs/raspberry-pi.md](docs/raspberry-pi.md) for the arm64
+build and the Pi setup.
 
 ## 🧪 Tests
 
 ```sh
-flutter test
+cargo test
 ```
 
-The widget tests drive the whole app against a fake Prometheus built from real
-captured responses — including the down `vm-gpu-worker-1` target — and load the
-bundled JetBrains Mono so layout assertions measure the true 0.6em advance
-instead of `flutter_test`'s 1em stand-in font. A `RenderFlex` overflow at
-1024x600 fails the suite.
+The core tests drive the store against a fake Prometheus serving canned
+responses for the whole cluster — including the down `vm-gpu-worker-1` target
+and a DCGM exporter that is down with only seven-day history to fall back on.
+The capture tests feed real JPEG fixtures through a fake ffmpeg process, and a
+render test draws the app offscreen at 1024x600 and checks frozen panel
+positions pixel by pixel.
 
 There is also a live smoke test that checks every PromQL expression the UI
 issues still returns usable data. It needs the server reachable, so it is off by
 default:
 
 ```sh
-flutter test test/live_smoke_test.dart --dart-define=RACKGLASS_LIVE=true --tags live
+RACKGLASS_LIVE_PROM_URL=http://10.0.0.5:9090 cargo test --test live_smoke -- --ignored
+```
+
+Every screen can be rendered to PNG against the fake cluster, which is how a
+visual change gets reviewed — against the approved design in `tests/reference/`:
+
+```sh
+cargo run --release --example preview
 ```
 
 ## 📐 Layout
 
 The panel is roughly 170 DPI and gets read at arm's length, so nothing is set
 below 13px and body text is 16px — a real console on this screen runs an 8x16
-font, and that is the floor the scale in `theme.dart` is built around. Because
+font, and that is the floor the scale in `ui/theme.slint` is built around. Because
 the type is large, screen density is a real constraint: panels carry a metric
 per line rather than a stacked label-and-bar, and anything that did not fit
 moved to NODES.
 
-Everything is laid out against a fixed 1024x600 canvas and then scaled with a
-`FittedBox`. The panel is pixel-perfect, larger windows get a proportionally
+Everything is laid out against a fixed 1024x600 canvas and then scaled to the
+window. The panel is pixel-perfect, larger windows get a proportionally
 larger copy, and no arrangement of data can push a widget off screen.
 
 Table columns are declared once as constants shared by the header and the rows,
@@ -195,18 +215,12 @@ so a column cannot be one width in the heading and another in the data.
 Leftover row width is split evenly between column groups rather than pooling
 into a single gap.
 
-`test/overlap_test.dart` goes further: on every mode it collects the rect of
-each visible `Text` and fails if any two share pixels. That is the failure mode
-no overflow check catches — a panel title sitting on the first row of content, a
-label with no room to ellipsize — and it looks broken on the panel while every
-other test stays green.
-
 ## 🎥 USB capture
 
 The card on this desk (MACROSILICON `345f:2109`) exposes MJPG natively, so
 ffmpeg runs as a pure stream copy — nothing is decoded, scaled or re-encoded in
-the child process — and the app splits the concatenated JPEGs itself and hands
-each to Skia. Measured on the real device: 4–8% of one core for the child at
+the child process — and the app splits the concatenated JPEGs itself and decodes
+each on a worker thread. Measured on the real device: 4–8% of one core for the child at
 1024x600@30, all of it moving bytes rather than touching pixels.
 
 The geometry is fixed rather than pickable. The card is flashed to offer
@@ -249,7 +263,7 @@ cannot disturb the session that replaced it.
 
 A capture card with nothing on its HDMI input streams valid black frames
 forever, which is indistinguishable from a broken app, so the frame is
-downscaled to 32x18 and averaged. The picture has to stay black for roughly
+downscaled to 64x36 and averaged. The picture has to stay black for roughly
 three seconds — 30 sampled frames — before the banner appears, since a fade or
 one dark scene is not a lost signal, and the last good frame keeps showing
 meanwhile. A returning source clears it with no hold at all.
@@ -292,17 +306,18 @@ readings. The same rule applies everywhere: a metric with no series renders
 ## 📁 Source layout
 
 ```
-lib/src/
-  config.dart              endpoint, poll interval, thresholds, design canvas
-  theme.dart               palette and monospace text styles
-  util.dart                bars, sparklines, byte/rate/duration formatting
-  prom/prom_client.dart    Prometheus HTTP API v1 (instant + range)
-  prom/queries.dart        every PromQL expression, in one place
-  model/snapshot.dart      NodeStat / GpuStat / TempReading / Snapshot
-  state/metrics_store.dart polling, history rings, range passthrough
-  widgets/                 panel frame, gauges, chart painter, cursor
-  capture/                 v4l2 capture: ffmpeg child, MJPEG framing, decode
-  screens/                 dash, graphs, nodes, capture
+src/
+  config.rs                runtime configuration, thresholds, staleness rules
+  fmt.rs                   bars, sparklines, byte/rate/duration formatting
+  prom/client.rs           Prometheus HTTP API v1 (instant + range)
+  prom/queries.rs          every PromQL expression, in one place
+  model.rs                 NodeStat / GpuStat / TempReading / Snapshot
+  store.rs                 polling, history rings, range passthrough
+  capture.rs               v4l2 capture: ffmpeg child, MJPEG framing, decode
+  ui/                      scene building per screen, charts, lifecycle glue
+ui/                        Slint markup: theme, components, the four screens
+examples/preview.rs        offscreen render of every screen to PNG
+tools/arm64/               podman cross-build for the Raspberry Pi
 ```
 
 ## 🤖 Built with Claude Code
@@ -311,7 +326,9 @@ This project was written with [Claude Code](https://claude.com/claude-code),
 Anthropic's agentic coding tool. The measured figures in this README — capture
 bandwidth per mode, child-process CPU, the 0..300s staleness sawtooth — come
 from running against the real hardware and the live Prometheus server rather
-than from estimation.
+than from estimation, and were taken on the Flutter version; the capture child is
+unchanged in the Rust port, which was written with OpenAI Codex under Claude
+Code's review.
 
 ## 📜 License
 

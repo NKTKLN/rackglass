@@ -1,0 +1,191 @@
+import { TC, TZ } from "theme.slint";
+/// What one scene item draws.
+export enum InkKind { text, rect, bar, image }
+export enum InkAlign { left, right, center }
+export struct Ink {
+    kind: InkKind,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    text: string,
+    size: float,
+    weight: int,
+    tracking: float,
+    color: color,
+    align: InkAlign,
+    pct: float,
+    image: image,
+}
+export component Mono inherits Text {
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    horizontal-alignment: left;
+    font-family: "JetBrains Mono";
+    font-size: TZ.body;
+    color: TC.fg;
+    vertical-alignment: center;
+    overflow: elide;
+    wrap: no-wrap;
+}
+export component BarGauge inherits Rectangle {
+    in property <float> pct: -1;
+    in property <color> ink: TC.fg;
+    background: transparent;
+    Rectangle {
+        y: root.pct < 0 ? (parent.height - 1px) / 2 : parent.height * 0.14;
+        height: root.pct < 0 ? 1px : parent.height * 0.72;
+        background: TC.bar-track;
+        Rectangle {
+            x: 0px;
+            width: parent.width * clamp(root.pct, 0, 100) / 100;
+            background: root.ink;
+        }
+    }
+}
+// Title sits over the rule; the 20px gutter keeps it clear of the first row.
+export component TermPanel inherits Rectangle {
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    in property <string> title;
+    in property <string> tag;
+    in property <color> accent: TC.border;
+    in property <color> title-color: TC.mid;
+    in property <color> tag-color: TC.fg;
+    background: TC.panel-bg;
+    border-width: 1px;
+    border-color: accent;
+    @children
+    Rectangle {
+        x: 10px;
+        y: -1px;
+        width: min(root.width - 20px - badge.width, title-text.preferred-width + 10px);
+        height: 17px;
+        background: TC.bg;
+        title-text := Mono {
+            x: 5px;
+            width: parent.width - 10px;
+            text: root.title;
+            font-size: TZ.caption;
+            letter-spacing: 1.2px;
+            color: root.title-color;
+        }
+    }
+    badge := Rectangle {
+        x: parent.width - self.width - 10px;
+        y: -1px;
+        width: root.tag == "" ? 0px : tag-text.preferred-width + 10px;
+        height: 17px;
+        background: TC.bg;
+        tag-text := Mono {
+            x: 5px;
+            text: root.tag;
+            font-size: TZ.caption;
+            font-weight: 700;
+            color: root.tag-color;
+        }
+    }
+}
+export component Scene inherits Rectangle {
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    in property <[Ink]> items;
+    background: transparent;
+    for item in items: Rectangle {
+        x: item.x * 1px;
+        y: item.y * 1px;
+        width: item.w * 1px;
+        height: item.h * 1px;
+        if item.kind == InkKind.text: Mono {
+            text: item.text;
+            font-size: item.size * 1px;
+            font-weight: item.weight;
+            letter-spacing: item.tracking * 1px;
+            color: item.color;
+            horizontal-alignment: item.align == InkAlign.right ? right : item.align == InkAlign.center ? center : left;
+        }
+        if item.kind == InkKind.rect: Rectangle {
+            background: item.color;
+        }
+        if item.kind == InkKind.bar: BarGauge {
+            pct: item.pct;
+            ink: item.color;
+        }
+        if item.kind == InkKind.image: Image {
+            source: item.image;
+            image-fit: fill;
+        }
+    }
+}
+export component PickButton inherits Rectangle {
+    x: 0px;
+    y: 0px;
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked;
+    width: caption.preferred-width + 26px;
+    height: 28px;
+    border-width: 1px;
+    border-color: selected ? TC.bright : TC.border;
+    background: selected ? TC.bright : TC.bg;
+    caption := Mono {
+        text: root.label;
+        font-size: TZ.small;
+        font-weight: root.selected ? 700 : 400;
+        color: root.selected ? TC.bg : TC.mid;
+        horizontal-alignment: center;
+    }
+    TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+// Only a gesture starts a short coast. The Rust callback caps launch velocity
+// at 1200px/s; no timer runs while these lists stand still.
+export component DragScroll inherits Rectangle {
+    in property <length> content-height;
+    in-out property <length> offset;
+    callback gesture(int, float);
+    clip: true;
+    Rectangle {
+        y: root.offset;
+        height: root.content-height;
+        @children
+    }
+    touch := TouchArea {
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                root.gesture(0, self.mouse-y / 1px);
+            }
+            if event.kind == PointerEventKind.up {
+                root.gesture(2, self.mouse-y / 1px);
+            }
+            if event.kind == PointerEventKind.cancel {
+                root.gesture(3, self.mouse-y / 1px);
+            }
+        }
+        moved => {
+            if self.pressed {
+                root.gesture(1, self.mouse-y / 1px);
+            }
+        }
+        scroll-event(event) => {
+            root.gesture(4, event.delta-y / 1px);
+            return accept;
+        }
+    }
+    if touch.pressed && root.content-height > root.height: Rectangle {
+        x: parent.width - 3px;
+        y: -root.offset / root.content-height * root.height;
+        width: 3px;
+        height: root.height * root.height / root.content-height;
+        background: TC.border;
+    }
+}

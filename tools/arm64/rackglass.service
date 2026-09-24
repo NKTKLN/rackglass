@@ -1,0 +1,16 @@
+[Unit]
+Description=Rackglass panel
+After=systemd-user-sessions.service network-online.target seatd.service
+Wants=network-online.target seatd.service
+
+[Service]
+User=nktkln
+Environment=RACKGLASS_FULLSCREEN=1
+ExecStart=/opt/rackglass/rackglass
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
