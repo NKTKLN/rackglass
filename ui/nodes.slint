@@ -1,0 +1,32 @@
+import { TC } from "theme.slint";
+import { Ink, Scene, TermPanel, Mono, DragScroll } from "components.slint";
+export component Nodes inherits Rectangle {
+    in property <[Ink]> targets;
+    in property <[Ink]> detail;
+    in property <string> title;
+    in property <string> tag;
+    in property <color> tag-color;
+    in property <string> message;
+    in property <float> targets-height;
+    in property <float> detail-height;
+    in-out property <length> targets-offset;
+    in-out property <length> detail-offset;
+    callback scroll(int, int, float);
+    if root.message != "": Mono { text: root.message; font-size: 18px; horizontal-alignment: center; color: TC.dim; }
+    if root.message == "": Rectangle {
+        TermPanel { width: 262px; title: "TARGETS";
+            DragScroll { x: 6px; y: 20px; width: 250px; height: parent.height - 26px;
+                content-height: root.targets-height * 1px; offset <=> root.targets-offset;
+                gesture(k, y) => { root.scroll(1, k, y); }
+                Scene { items: root.targets; }
+            }
+        }
+        TermPanel { x: 268px; width: 744px; title: root.title; tag: root.tag; tag-color: root.tag-color;
+            DragScroll { x: 10px; y: 20px; width: 724px; height: parent.height - 28px;
+                content-height: root.detail-height * 1px; offset <=> root.detail-offset;
+                gesture(k, y) => { root.scroll(2, k, y); }
+                Scene { width: 714px; items: root.detail; }
+            }
+        }
+    }
+}

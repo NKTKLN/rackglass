@@ -1,24 +1,14 @@
-use rackglass::{Config, MetricsStore, PromClient};
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cfg = Config::load()?;
-    let client = PromClient::new(&cfg.prom_url);
-    let store = MetricsStore::new(cfg, client);
-    if let Some(poll) = store.refresh() {
-        poll.join().map_err(|_| "poll worker panicked")?;
-    }
-    let state = store.state();
-    if let Some(error) = state.error {
-        return Err(error.into());
-    }
-    if let Some(s) = state.snapshot {
-        println!(
-            "{} nodes ({} down), {} GPUs, {} temperatures; poll {}ms",
-            s.nodes.len(),
-            s.targets_down(),
-            s.gpus.len(),
-            s.temps.len(),
-            s.fetch_millis
-        );
-    }
+use rackglass::{Config,ui::{AppWindow,runtime::Runtime}};
+use slint::ComponentHandle;
+fn main()->Result<(),Box<dyn std::error::Error>> {
+    let cfg=Config::load()?;
+    // Explicit user selections retain precedence, including a renderer suffix.
+    let backend=std::env::var("SLINT_BACKEND").unwrap_or_else(|_|if cfg!(feature="desktop"){"winit-software".into()}else{"linuxkms-software".into()});
+    slint::BackendSelector::new().backend_name(backend).select()?;
+    let window=AppWindow::new()?;
+    if std::env::var("RACKGLASS_FULLSCREEN").as_deref()==Ok("1"){window.window().set_fullscreen(true);}
+    let runtime=Runtime::attach(&window,cfg);
+    window.run()?;
+    drop(runtime);
     Ok(())
 }
