@@ -6,7 +6,7 @@ use super::{
     dashboard,
     history::{self, Colors, RequestGuard, Ticket},
     nodes,
-    scene::model,
+    scene::{model, sync_ink},
 };
 use crate::{
     Config, MetricsStore, PromClient,
@@ -522,8 +522,13 @@ pub fn empty_node_charts(up: bool) -> [Chart; 4] {
     history::node_charts(&vec![vec![]; 5], Utc::now(), up)
 }
 pub fn present_graphs(window: &AppWindow, charts: &[Chart; 4], cache: &mut ChartCache) {
-    window.set_graph_util(model(cache.render(&charts[0], 489, 211)));
-    window.set_graph_temp(model(cache.render(&charts[1], 489, 211)));
-    window.set_graph_memory(model(cache.render(&charts[2], 489, 211)));
-    window.set_graph_speed(model(cache.render(&charts[3], 489, 211)));
+    let [util, temp, memory, speed] = charts.each_ref().map(|c| cache.render(c, 489, 211));
+    sync_ink(window.get_graph_util(), util, |m| window.set_graph_util(m));
+    sync_ink(window.get_graph_temp(), temp, |m| window.set_graph_temp(m));
+    sync_ink(window.get_graph_memory(), memory, |m| {
+        window.set_graph_memory(m)
+    });
+    sync_ink(window.get_graph_speed(), speed, |m| {
+        window.set_graph_speed(m)
+    });
 }

@@ -1,6 +1,6 @@
 //! Layout primitives in design pixels. Slint owns text, bars and dirty regions.
 use super::Ink;
-use slint::{Color, Image, ModelRc, VecModel};
+use slint::{Color, Image, Model, ModelRc, VecModel};
 use std::rc::Rc;
 
 pub const BG: u32 = 0x000000;
@@ -39,6 +39,81 @@ pub fn thermal(v: Option<f64>, warn: f64, crit: f64) -> u32 {
 }
 pub fn model<T: Clone + 'static>(v: Vec<T>) -> ModelRc<T> {
     Rc::new(VecModel::from(v)).into()
+}
+/// Bring a model to `next` by changing only the rows that differ.
+///
+/// Handing Slint a fresh model makes the repeater tear down and rebuild every
+/// element, and the software renderer then repaints the whole screen for a
+/// poll that moved one number. Editing rows in place keeps the dirty region to
+/// the elements that actually changed. The first call, before any VecModel is
+/// installed, goes through `set`.
+pub fn sync<T: Clone + PartialEq + 'static>(
+    current: ModelRc<T>,
+    next: Vec<T>,
+    set: impl FnOnce(ModelRc<T>),
+) {
+    sync_by(current, next, set, |a, b| a == b);
+}
+/// [`sync`] for scene items, which cannot use their derived `PartialEq`.
+pub fn sync_ink(current: ModelRc<Ink>, next: Vec<Ink>, set: impl FnOnce(ModelRc<Ink>)) {
+    sync_by(current, next, set, same_ink);
+}
+fn sync_by<T: Clone + 'static>(
+    current: ModelRc<T>,
+    next: Vec<T>,
+    set: impl FnOnce(ModelRc<T>),
+    same: impl Fn(&T, &T) -> bool,
+) {
+    let Some(rows) = current.as_any().downcast_ref::<VecModel<T>>() else {
+        set(model(next));
+        return;
+    };
+    let kept = rows.row_count().min(next.len());
+    while rows.row_count() > next.len() {
+        rows.remove(rows.row_count() - 1);
+    }
+    for (i, item) in next.into_iter().enumerate() {
+        if i >= kept {
+            rows.push(item);
+        } else if !rows.row_data(i).is_some_and(|old| same(&old, &item)) {
+            rows.set_row_data(i, item);
+        }
+    }
+}
+/// Slint's `Image` never equals an empty `Image`, not even another empty one,
+/// so the derived comparison calls every text element changed. Compare the
+/// image only where one is drawn; a cached chart hands back the same image,
+/// which does compare equal. The destructuring is exhaustive on purpose: a new
+/// field must be added here or this stops compiling.
+pub fn same_ink(a: &Ink, b: &Ink) -> bool {
+    let Ink {
+        kind,
+        x,
+        y,
+        w,
+        h,
+        text,
+        size,
+        weight,
+        tracking,
+        color,
+        align,
+        pct,
+        image,
+    } = a;
+    *kind == b.kind
+        && *x == b.x
+        && *y == b.y
+        && *w == b.w
+        && *h == b.h
+        && *text == b.text
+        && *size == b.size
+        && *weight == b.weight
+        && *tracking == b.tracking
+        && *color == b.color
+        && *align == b.align
+        && *pct == b.pct
+        && (*kind != 3 || *image == b.image)
 }
 #[derive(Default, Clone)]
 pub struct Scene(pub Vec<Ink>);
@@ -141,9 +216,6 @@ impl Scene {
             i.y += y;
             i
         }));
-    }
-    pub fn into_model(self) -> ModelRc<Ink> {
-        model(self.0)
     }
 }
 /// The header and body use these exact column boxes. Elastic gaps keep the

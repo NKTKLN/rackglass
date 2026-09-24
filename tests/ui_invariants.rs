@@ -80,3 +80,39 @@ fn graph_window_changes_and_node_selection_reject_stale_completions() {
         assert!(guard.finish(&visible));
     }
 }
+
+#[test]
+fn sync_edits_rows_in_place_and_installs_only_the_first_model() {
+    use rackglass::ui::scene::sync;
+    use slint::{Model, ModelRc, VecModel};
+    use std::rc::Rc;
+
+    let rows = Rc::new(VecModel::from(vec![1, 2, 3]));
+    let current: ModelRc<i32> = rows.clone().into();
+    let mut replaced = false;
+    sync(current.clone(), vec![1, 9, 3, 4], |_| replaced = true);
+    assert_eq!(rows.iter().collect::<Vec<_>>(), [1, 9, 3, 4]);
+    sync(current, vec![5], |_| replaced = true);
+    assert_eq!(rows.iter().collect::<Vec<_>>(), [5]);
+    assert!(!replaced, "an installed VecModel is edited, never replaced");
+
+    let mut installed = None;
+    sync(ModelRc::default(), vec![7], |m| installed = Some(m));
+    let installed = installed.expect("the first call installs a model");
+    assert_eq!(installed.iter().collect::<Vec<_>>(), [7]);
+}
+
+#[test]
+fn identical_text_items_compare_the_same_despite_their_empty_images() {
+    use rackglass::ui::scene::{Scene, same_ink};
+    let build = |text: &str| {
+        let mut s = Scene::default();
+        s.text(10., 20., 100., text, 16., 0xffffff, 500);
+        s.0.remove(0)
+    };
+    // The derived PartialEq says no here, which once made every poll rewrite
+    // every row.
+    assert!(build("42%") != build("42%"));
+    assert!(same_ink(&build("42%"), &build("42%")));
+    assert!(!same_ink(&build("42%"), &build("43%")));
+}

@@ -124,7 +124,7 @@ fn frozen_panel_positions_left_growing_bars_and_target_selection() {
         );
     }
     window.set_mode(0);
-    window.set_dash_cpu(labels.into_model());
+    window.set_dash_cpu(rackglass::ui::scene::model(labels.0));
     let pixels = render(&surface);
     let ink: Vec<u64> = (0..3)
         .map(|row| {

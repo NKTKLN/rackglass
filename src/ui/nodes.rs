@@ -142,7 +142,9 @@ pub fn update(
             .align = 2;
     }
     window.set_targets_height(snapshot.nodes.len() as f32 * stride);
-    window.set_node_targets(targets.into_model());
+    sync_ink(window.get_node_targets(), targets.0, |m| {
+        window.set_node_targets(m)
+    });
     let mut detail = Scene::default();
     metric(
         &mut detail,
@@ -369,5 +371,7 @@ pub fn update(
         y += 142.;
     }
     window.set_detail_height(y);
-    window.set_node_detail(detail.into_model());
+    sync_ink(window.get_node_detail(), detail.0, |m| {
+        window.set_node_detail(m)
+    });
 }

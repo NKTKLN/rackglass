@@ -340,34 +340,44 @@ pub fn update(window: &AppWindow, state: &StoreState) {
     );
     let guests = snapshot.vms();
     let down = guests.iter().filter(|node| !node.up).count();
-    window.set_dash_titles(model(vec![
-        format!(
-            "CPU · {}",
-            host.map(|h| h.instance.as_str()).unwrap_or("host")
-        )
-        .to_uppercase()
-        .into(),
-        gpu_title.into(),
-        format!("NODES · {}", guests.len()).into(),
-    ]));
-    window.set_dash_tags(model(vec![
-        if host.is_some_and(|node| !node.up) {
-            "[ DOWN ]".into()
-        } else {
-            "".into()
-        },
-        gpu_tag.into(),
-        if down > 0 {
-            format!("[ {down} DOWN ]").into()
-        } else {
-            "".into()
-        },
-    ]));
+    sync(
+        window.get_dash_titles(),
+        vec![
+            format!(
+                "CPU · {}",
+                host.map(|h| h.instance.as_str()).unwrap_or("host")
+            )
+            .to_uppercase()
+            .into(),
+            gpu_title.into(),
+            format!("NODES · {}", guests.len()).into(),
+        ],
+        |m| window.set_dash_titles(m),
+    );
+    sync(
+        window.get_dash_tags(),
+        vec![
+            if host.is_some_and(|node| !node.up) {
+                "[ DOWN ]".into()
+            } else {
+                "".into()
+            },
+            gpu_tag.into(),
+            if down > 0 {
+                format!("[ {down} DOWN ]").into()
+            } else {
+                "".into()
+            },
+        ],
+        |m| window.set_dash_tags(m),
+    );
     window.set_host_down(host.is_some_and(|node| !node.up));
     window.set_gpu_stale(stale);
-    window.set_dash_cpu(cpu.into_model());
-    window.set_dash_gpu(gpu.into_model());
-    window.set_dash_memory(memory.into_model());
+    sync_ink(window.get_dash_cpu(), cpu.0, |m| window.set_dash_cpu(m));
+    sync_ink(window.get_dash_gpu(), gpu.0, |m| window.set_dash_gpu(m));
+    sync_ink(window.get_dash_memory(), memory.0, |m| {
+        window.set_dash_memory(m)
+    });
     let mut headers = Scene::default();
     for (title, x, width) in header_boxes(996.) {
         let t = headers.text(x, 2.55, width, title, 13., DIM, 400);
@@ -375,7 +385,9 @@ pub fn update(window: &AppWindow, state: &StoreState) {
         t.tracking = 1.;
     }
     headers.rect(0., 22., 996., 1., GRID);
-    window.set_dash_headers(headers.into_model());
+    sync_ink(window.get_dash_headers(), headers.0, |m| {
+        window.set_dash_headers(m)
+    });
     let mut rows = Scene::default();
     let extent = (261. / guests.len().max(1) as f32).max(44.);
     let columns = column_boxes(996.);
@@ -469,7 +481,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
             .align = 2;
     }
     window.set_rows_height((guests.len() as f32 * extent).max(261.));
-    window.set_dash_rows(rows.into_model());
+    sync_ink(window.get_dash_rows(), rows.0, |m| window.set_dash_rows(m));
 }
 pub fn status(window: &AppWindow, state: &StoreState, clock: chrono::DateTime<Local>) {
     let mut scene = Scene::default();
@@ -540,5 +552,5 @@ pub fn status(window: &AppWindow, state: &StoreState, clock: chrono::DateTime<Lo
         );
     }
     scene.text(1016. - kw, 4.55, kw, keys, 13., DIM, 400);
-    window.set_status(scene.into_model());
+    sync_ink(window.get_status(), scene.0, |m| window.set_status(m));
 }
