@@ -170,30 +170,46 @@ pub fn discover_devices() -> Vec<CaptureDevice> {
 /// A frame ends at the next SOI marker, even when a marker spans pipe reads.
 /// Retain the unfinished tail; cap junk so a desynchronised device cannot
 /// consume unbounded memory on the panel.
+///
+/// Scanning resumes where the previous read stopped. A frame arrives over
+/// several reads, and rescanning everything buffered on each one cost the
+/// Pi's CPU a multiple of the stream rate for nothing.
 #[derive(Default)]
 pub struct MjpegSplitter {
     buffer: Vec<u8>,
+    /// Bytes already searched for markers.
+    scanned: usize,
+    /// Where the frame being assembled begins, once a marker has been seen.
+    start: Option<usize>,
 }
 impl MjpegSplitter {
+    const SOI: [u8; 3] = [0xFF, 0xD8, 0xFF];
+
     pub fn push(&mut self, chunk: &[u8]) -> Vec<Vec<u8>> {
         self.buffer.extend_from_slice(chunk);
         let mut frames = Vec::new();
-        let starts: Vec<_> = self
-            .buffer
-            .windows(3)
-            .enumerate()
-            .filter_map(|(i, w)| (w == [255, 216, 255]).then_some(i))
-            .collect();
-        for pair in starts.windows(2) {
-            if pair[1] >= pair[0] + 3 {
-                frames.push(self.buffer[pair[0]..pair[1]].to_vec());
+        // A marker needs three bytes, so the last two searched could still be
+        // the head of one completed by this chunk.
+        let mut i = self.scanned.saturating_sub(2);
+        while i + Self::SOI.len() <= self.buffer.len() {
+            if self.buffer[i..i + Self::SOI.len()] == Self::SOI {
+                if let Some(start) = self.start
+                    && i >= start + Self::SOI.len()
+                {
+                    frames.push(self.buffer[start..i].to_vec());
+                }
+                self.start = Some(i);
             }
+            i += 1;
         }
-        if let Some(last) = starts.last() {
-            self.buffer.drain(..*last);
+        self.scanned = self.buffer.len();
+        if let Some(start) = self.start.filter(|s| *s > 0) {
+            self.buffer.drain(..start);
+            self.scanned -= start;
+            self.start = Some(0);
         }
         if self.buffer.len() > CAPTURE_BUFFER_LIMIT {
-            self.buffer.clear();
+            *self = Self::default();
         }
         frames
     }

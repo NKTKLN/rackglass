@@ -350,3 +350,51 @@ fn sustained_black_stream_sets_no_signal_and_console_clears_it() {
     }
     assert_eq!(controller.state().frame.unwrap().width, 32);
 }
+
+/// The splitter this replaced: rescans the whole buffer on every push. Kept
+/// here as the reference the incremental one must agree with.
+fn reference_split(buffer: &mut Vec<u8>, chunk: &[u8]) -> Vec<Vec<u8>> {
+    buffer.extend_from_slice(chunk);
+    let starts: Vec<_> = buffer
+        .windows(3)
+        .enumerate()
+        .filter_map(|(i, w)| (w == [255, 216, 255]).then_some(i))
+        .collect();
+    let frames = starts
+        .windows(2)
+        .filter(|p| p[1] >= p[0] + 3)
+        .map(|p| buffer[p[0]..p[1]].to_vec())
+        .collect();
+    if let Some(last) = starts.last() {
+        buffer.drain(..*last);
+    }
+    frames
+}
+
+#[test]
+fn incremental_splitter_matches_a_full_rescan_for_every_chunking() {
+    // Junk before the first marker, overlapping markers, a marker at the very
+    // end, and payload bytes that look like half a marker.
+    let mut stream = vec![1, 2, 0xFF, 0xD8];
+    for n in 0..40u8 {
+        stream.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xE0]);
+        stream.extend((0..n).map(|i| i.wrapping_mul(37)));
+        if n % 7 == 0 {
+            stream.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xD8, 0xFF]);
+        }
+        stream.extend_from_slice(&[0xFF, 0xD8]);
+    }
+    stream.extend_from_slice(&[0xFF, 0xD8, 0xFF]);
+    for size in [1, 2, 3, 5, 64, 1000, stream.len()] {
+        let mut splitter = MjpegSplitter::default();
+        let mut reference = Vec::new();
+        for chunk in stream.chunks(size) {
+            assert_eq!(
+                splitter.push(chunk),
+                reference_split(&mut reference, chunk),
+                "chunk size {size}"
+            );
+            assert_eq!(splitter.buffered(), reference.len(), "chunk size {size}");
+        }
+    }
+}
