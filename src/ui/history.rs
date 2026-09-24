@@ -156,25 +156,37 @@ pub fn graph_charts(
     end: DateTime<Utc>,
     colors: &mut Colors,
 ) -> [Chart; 4] {
+    // Same order as graph_queries().
+    let [
+        cpu,
+        cpu_temp,
+        gpu_temp,
+        gpu_util,
+        memory,
+        speed_down,
+        speed_up,
+    ] = data
+    else {
+        panic!("graph_charts needs one result per graph query");
+    };
     assign(
         &mut colors.nodes,
-        data[0]
-            .iter()
-            .chain(&data[4])
+        cpu.iter()
+            .chain(memory)
             .map(|s| s.instance().unwrap_or("?").into()),
         &NODE_COLORS,
     );
     assign(
         &mut colors.gpus,
-        data[2].iter().chain(&data[3]).map(gpu_key),
+        gpu_temp.iter().chain(gpu_util).map(gpu_key),
         &GPU_COLORS,
     );
     assign(
         &mut colors.paths,
-        data[5]
+        speed_down
             .iter()
             .map(|s| speed_key(s, "↓"))
-            .chain(data[6].iter().map(|s| speed_key(s, "↑"))),
+            .chain(speed_up.iter().map(|s| speed_key(s, "↑"))),
         &NODE_COLORS,
     );
     let base = Chart {
@@ -206,17 +218,17 @@ pub fn graph_charts(
     };
     [
         Chart {
-            series: data[0]
+            series: cpu
                 .iter()
                 .map(by_node)
-                .chain(data[3].iter().map(by_gpu))
+                .chain(gpu_util.iter().map(by_gpu))
                 .collect(),
             min: Some(0.),
             unit: "%".into(),
             ..base.clone()
         },
         Chart {
-            series: data[1]
+            series: cpu_temp
                 .iter()
                 .map(|s| {
                     let label = s
@@ -232,20 +244,20 @@ pub fn graph_charts(
                         1.,
                     )
                 })
-                .chain(data[2].iter().map(by_gpu))
+                .chain(gpu_temp.iter().map(by_gpu))
                 .collect(),
             unit: "°".into(),
             ..base.clone()
         },
         Chart {
-            series: data[4].iter().map(by_node).collect(),
+            series: memory.iter().map(by_node).collect(),
             min: Some(0.),
             max: Some(100.),
             unit: "%".into(),
             ..base.clone()
         },
         Chart {
-            series: [("↓", &data[5]), ("↑", &data[6])]
+            series: [("↓", speed_down), ("↑", speed_up)]
                 .into_iter()
                 .flat_map(|(dir, list)| list.iter().map(move |s| (s, dir)))
                 .map(|(s, dir)| {
@@ -283,6 +295,10 @@ pub fn node_queries(instance: &str, temps: bool, gpus: bool) -> Vec<String> {
     ]
 }
 pub fn node_charts(data: &[Vec<PromSeries>], end: DateTime<Utc>, up: bool) -> [Chart; 4] {
+    // Same order as node_queries().
+    let [cpu, memory, hwmon, gpu_temp, gpu_util] = data else {
+        panic!("node_charts needs one result per node query");
+    };
     let base = Chart {
         window: 3600,
         end: end.timestamp_millis() as f64 / 1000.,
@@ -302,7 +318,7 @@ pub fn node_charts(data: &[Vec<PromSeries>], end: DateTime<Utc>, up: bool) -> [C
     };
     [
         Chart {
-            series: data[0]
+            series: cpu
                 .iter()
                 .map(|s| series(s, "cpu".into(), FG, 1.))
                 .collect(),
@@ -317,7 +333,7 @@ pub fn node_charts(data: &[Vec<PromSeries>], end: DateTime<Utc>, up: bool) -> [C
             ..base.clone()
         },
         Chart {
-            series: data[1]
+            series: memory
                 .iter()
                 .map(|s| series(s, "memory".into(), CYAN, 1. / (1024. * 1024. * 1024.)))
                 .collect(),
@@ -331,7 +347,7 @@ pub fn node_charts(data: &[Vec<PromSeries>], end: DateTime<Utc>, up: bool) -> [C
             ..base.clone()
         },
         Chart {
-            series: data[2]
+            series: hwmon
                 .iter()
                 .map(|s| {
                     let label = s
@@ -342,14 +358,14 @@ pub fn node_charts(data: &[Vec<PromSeries>], end: DateTime<Utc>, up: bool) -> [C
                         .unwrap_or("sensor");
                     series(s, label.into(), if label == "Tctl" { FG } else { CYAN }, 1.)
                 })
-                .chain(data[3].iter().map(gpu))
+                .chain(gpu_temp.iter().map(gpu))
                 .collect(),
             unit: "°".into(),
             empty: "NO TEMPERATURE HISTORY".into(),
             ..base.clone()
         },
         Chart {
-            series: data[4].iter().map(gpu).collect(),
+            series: gpu_util.iter().map(gpu).collect(),
             max: Some(100.),
             unit: "%".into(),
             empty: "NO GPU HISTORY".into(),
