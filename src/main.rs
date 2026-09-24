@@ -17,7 +17,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .backend_name(backend)
         .select()?;
     let window = AppWindow::new()?;
-    if std::env::var("RACKGLASS_FULLSCREEN").as_deref() == Ok("1") {
+    // Any value but an explicit no, so `=yes` or `=true` in a unit file works.
+    let fullscreen = std::env::var("RACKGLASS_FULLSCREEN").is_ok_and(|v| {
+        !matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "" | "0" | "false" | "no" | "off"
+        )
+    });
+    if fullscreen {
         window.window().set_fullscreen(true);
     }
     let runtime = Runtime::attach(&window, cfg);
