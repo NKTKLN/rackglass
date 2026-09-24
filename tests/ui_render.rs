@@ -7,7 +7,7 @@ use fake_prometheus::FakePrometheus;
 use rackglass::{
     Config, MetricsStore,
     ui::{
-        AppWindow,
+        AppWindow, InkAlign, InkKind,
         chart::{Chart, ChartCache},
         dashboard, nodes,
     },
@@ -72,7 +72,7 @@ fn frozen_panel_positions_left_growing_bars_and_target_selection() {
         .iter()
         .find(|item| item.text == "vm-node-1")
         .unwrap();
-    assert_eq!(name.align, 0);
+    assert_eq!(name.align, InkAlign::Left);
     assert_eq!(name.weight, 500);
 
     window.set_mode(2);
@@ -98,17 +98,19 @@ fn frozen_panel_positions_left_growing_bars_and_target_selection() {
     let detail: Vec<_> = window.get_node_detail().iter().collect();
     for gauge in detail
         .iter()
-        .filter(|item| item.kind == 2 && item.x == 458.)
+        .filter(|item| item.kind == InkKind::Bar && item.x == 458.)
     {
         assert!((gauge.w - 134.4).abs() < 0.001);
         let chip = detail
             .iter()
             .find(|item| {
-                item.kind == 0 && item.x > gauge.x && (item.y - gauge.y - 1.95).abs() < 0.01
+                item.kind == InkKind::Text
+                    && item.x > gauge.x
+                    && (item.y - gauge.y - 1.95).abs() < 0.01
             })
             .unwrap();
         assert!(chip.x >= gauge.x + gauge.w + 8.);
-        assert_eq!(chip.align, 0);
+        assert_eq!(chip.align, InkAlign::Left);
     }
     // Dynamic Ink weights must reach the renderer, not just the scene model.
     let mut labels = rackglass::ui::scene::Scene::default();

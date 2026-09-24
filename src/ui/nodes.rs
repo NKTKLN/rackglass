@@ -1,5 +1,5 @@
 use super::{
-    AppWindow,
+    AppWindow, InkAlign,
     chart::{Chart, ChartCache},
     layout::*,
     scene::*,
@@ -140,7 +140,7 @@ pub fn update(
                 if selected { BG } else { ink },
                 700,
             )
-            .align = 2;
+            .align = InkAlign::Center;
     }
     window.set_targets_height(snapshot.nodes.len() as f32 * stride);
     sync_ink(window.get_node_targets(), targets.0, |m| {
@@ -255,7 +255,7 @@ pub fn update(
                     thermal(Some(sensor.celsius), 70., 85.),
                     500,
                 )
-                .align = 1;
+                .align = InkAlign::Right;
             detail.bar(
                 458.,
                 y,
@@ -355,7 +355,7 @@ pub fn update(
     if loading {
         detail
             .text(500., y, 214., "LOADING…", 13., AMBER, 400)
-            .align = 1;
+            .align = InkAlign::Right;
     }
     y += 20.9;
     for (i, caption) in [

@@ -1,5 +1,5 @@
 //! Layout primitives in design pixels. Slint owns text, bars and dirty regions.
-use super::Ink;
+use super::{Ink, InkAlign, InkKind};
 use slint::{Color, Image, Model, ModelRc, VecModel};
 use std::rc::Rc;
 
@@ -113,7 +113,7 @@ pub fn same_ink(a: &Ink, b: &Ink) -> bool {
         && *color == b.color
         && *align == b.align
         && *pct == b.pct
-        && (*kind != 3 || *image == b.image)
+        && (*kind != InkKind::Image || *image == b.image)
 }
 #[derive(Default, Clone)]
 pub struct Scene(pub Vec<Ink>);
@@ -130,7 +130,7 @@ impl Scene {
         weight: i32,
     ) -> &mut Ink {
         self.0.push(Ink {
-            kind: 0,
+            kind: InkKind::Text,
             x,
             y,
             w,
@@ -148,7 +148,7 @@ impl Scene {
     }
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, ink: u32) {
         self.0.push(Ink {
-            kind: 1,
+            kind: InkKind::Rect,
             x,
             y,
             w,
@@ -162,7 +162,7 @@ impl Scene {
         // full available width, as Flutter's tight constraints require. Unknown
         // is a rule rather than an empty track, which would falsely imply zero.
         self.0.push(Ink {
-            kind: 2,
+            kind: InkKind::Bar,
             x,
             y,
             w,
@@ -174,7 +174,7 @@ impl Scene {
     }
     pub fn image(&mut self, x: f32, y: f32, w: f32, h: f32, image: Image) {
         self.0.push(Ink {
-            kind: 3,
+            kind: InkKind::Image,
             x,
             y,
             w,
@@ -208,7 +208,7 @@ impl Scene {
             ink,
             weight,
         )
-        .align = 1;
+        .align = InkAlign::Right;
     }
     pub fn append_at(&mut self, other: &[Ink], x: f32, y: f32) {
         self.0.extend(other.iter().cloned().map(|mut i| {
@@ -224,62 +224,62 @@ pub struct Column {
     pub width: f32,
     pub heading: &'static str,
     pub span: usize,
-    pub align: i32,
+    pub align: InkAlign,
 }
 pub const COLUMNS: [Column; 9] = [
     Column {
         width: 24.,
         heading: "",
         span: 1,
-        align: 0,
+        align: InkAlign::Left,
     },
     Column {
         width: 160.,
         heading: "INSTANCE",
         span: 1,
-        align: 0,
+        align: InkAlign::Left,
     },
     Column {
         width: 52.,
         heading: "CPU",
         span: 2,
-        align: 1,
+        align: InkAlign::Right,
     },
     Column {
         width: 120.,
         heading: "",
         span: 1,
-        align: 1,
+        align: InkAlign::Right,
     },
     Column {
         width: 56.,
         heading: "MEMORY",
         span: 3,
-        align: 1,
+        align: InkAlign::Right,
     },
     Column {
         width: 120.,
         heading: "",
         span: 1,
-        align: 1,
+        align: InkAlign::Right,
     },
     Column {
         width: 112.,
         heading: "",
         span: 1,
-        align: 0,
+        align: InkAlign::Left,
     },
     Column {
         width: 108.,
         heading: "ROOT",
         span: 1,
-        align: 0,
+        align: InkAlign::Left,
     },
     Column {
         width: 72.,
         heading: "UPTIME",
         span: 1,
-        align: 2,
+        align: InkAlign::Center,
     },
 ];
 pub fn column_boxes(width: f32) -> Vec<(f32, f32)> {

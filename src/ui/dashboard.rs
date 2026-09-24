@@ -1,4 +1,4 @@
-use super::{AppWindow, layout::*, scene::*};
+use super::{AppWindow, InkAlign, layout::*, scene::*};
 use crate::{fmt::*, store::StoreState};
 use chrono::Local;
 
@@ -41,7 +41,7 @@ fn inline(
     scene.bar(58., y, width - 116., percentage, ink);
     scene
         .text(width - 58., y, 48., fmt_pct(percentage, 0), 16., ink, 500)
-        .align = 1;
+        .align = InkAlign::Right;
 }
 fn spark(
     scene: &mut Scene,
@@ -111,7 +111,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
             thermal(Some(t.celsius), 70., 85.),
             400,
         )
-        .align = 1;
+        .align = InkAlign::Right;
     }
     cpu.rect(10., 81.5, 302., 1., GRID);
     inline(
@@ -146,7 +146,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
         DIM,
         400,
     )
-    .align = 1;
+    .align = InkAlign::Right;
     spark(
         &mut cpu,
         (10., 170., 157.),
@@ -197,7 +197,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
             if stale { DIM } else { WHITE },
             400,
         )
-        .align = 1;
+        .align = InkAlign::Right;
         gpu.text(
             216.,
             40.8,
@@ -207,7 +207,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
             DIM,
             400,
         )
-        .align = 1;
+        .align = InkAlign::Right;
         gpu.text(
             216.,
             57.7,
@@ -217,7 +217,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
             DIM,
             400,
         )
-        .align = 1;
+        .align = InkAlign::Right;
         gpu.rect(10., 81.5, 324., 1., GRID);
         inline(&mut gpu, 344., 86., "UTIL", gpu_stat.util, stale);
         inline(&mut gpu, 344., 110.8, "VRAM", gpu_stat.fb_pct(), stale);
@@ -256,7 +256,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
         }
     } else {
         gpu.text(10., 90., 324., "NO GPU SERIES IN TSDB", 14., DIM, 400)
-            .align = 2;
+            .align = InkAlign::Center;
     }
     let total = host.and_then(|node| node.mem_total);
     let mem_pct = host.and_then(|node| node.mem_pct());
@@ -381,7 +381,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
     let mut headers = Scene::default();
     for (title, x, width) in header_boxes(TABLE_WIDTH) {
         let t = headers.text(x, 2.55, width, title, 13., DIM, 400);
-        t.align = 2;
+        t.align = InkAlign::Center;
         t.tracking = 1.;
     }
     headers.rect(0., 22., TABLE_WIDTH, 1., GRID);
@@ -478,7 +478,7 @@ pub fn update(window: &AppWindow, state: &StoreState) {
     }
     if guests.is_empty() {
         rows.text(0., 120., TABLE_WIDTH, "NO GUEST TARGETS", 14., DIM, 400)
-            .align = 2;
+            .align = InkAlign::Center;
     }
     window.set_rows_height((guests.len() as f32 * extent).max(TABLE_VIEWPORT));
     sync_ink(window.get_dash_rows(), rows.0, |m| window.set_dash_rows(m));

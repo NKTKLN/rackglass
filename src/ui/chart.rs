@@ -1,5 +1,5 @@
 //! Rasterise only the plot. Axis and legend glyphs remain ordinary Slint Text.
-use super::{Ink, scene::*};
+use super::{Ink, InkAlign, InkKind, scene::*};
 use crate::{
     fmt::{fmt_ago_short, fmt_num},
     prom::client::PromPoint,
@@ -131,7 +131,7 @@ fn render(chart: &Chart, width: u32, height: u32) -> Vec<Ink> {
             DIM,
             400,
         );
-        t.align = 2;
+        t.align = InkAlign::Center;
         t.tracking = 1.5;
         return scene.0;
     }
@@ -186,7 +186,7 @@ fn render(chart: &Chart, width: u32, height: u32) -> Vec<Ink> {
                 DIM,
                 400,
             )
-            .align = 1;
+            .align = InkAlign::Right;
         let x = left + f * (right - left);
         if i > 0 && i < 4 {
             let mut y = top;
@@ -311,7 +311,7 @@ fn render(chart: &Chart, width: u32, height: u32) -> Vec<Ink> {
     scene.0.insert(
         0,
         Ink {
-            kind: 3,
+            kind: InkKind::Image,
             x: 0.,
             y: 0.,
             w: width as f32,

@@ -1,6 +1,9 @@
 import { TC, TZ } from "theme.slint";
+/// What one scene item draws.
+export enum InkKind { text, rect, bar, image }
+export enum InkAlign { left, right, center }
 export struct Ink {
-    kind: int,
+    kind: InkKind,
     x: float,
     y: float,
     w: float,
@@ -10,7 +13,7 @@ export struct Ink {
     weight: int,
     tracking: float,
     color: color,
-    align: int,
+    align: InkAlign,
     pct: float,
     image: image,
 }
@@ -99,22 +102,22 @@ export component Scene inherits Rectangle {
         y: item.y * 1px;
         width: item.w * 1px;
         height: item.h * 1px;
-        if item.kind == 0: Mono {
+        if item.kind == InkKind.text: Mono {
             text: item.text;
             font-size: item.size * 1px;
             font-weight: item.weight;
             letter-spacing: item.tracking * 1px;
             color: item.color;
-            horizontal-alignment: item.align == 1 ? right : item.align == 2 ? center : left;
+            horizontal-alignment: item.align == InkAlign.right ? right : item.align == InkAlign.center ? center : left;
         }
-        if item.kind == 1: Rectangle {
+        if item.kind == InkKind.rect: Rectangle {
             background: item.color;
         }
-        if item.kind == 2: BarGauge {
+        if item.kind == InkKind.bar: BarGauge {
             pct: item.pct;
             ink: item.color;
         }
-        if item.kind == 3: Image {
+        if item.kind == InkKind.image: Image {
             source: item.image;
             image-fit: fill;
         }
