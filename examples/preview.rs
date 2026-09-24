@@ -1,6 +1,6 @@
 //! Renders every screen offscreen against the fake cluster and writes PNGs to
-//! target/preview/, the same states test/preview_test.dart captured. This is
-//! how a visual change gets reviewed: compare against test/preview/.
+//! target/preview/, the same states the Flutter version was approved in. This is
+//! how a visual change gets reviewed: compare against tests/reference/.
 //!
 //!   cargo run --release --example preview
 
