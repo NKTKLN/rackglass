@@ -48,3 +48,6 @@ app.*.map.json
 # Copy config.env.example to config.env and edit that.
 config.env
 config.*.env
+
+# Rust build output
+/target
